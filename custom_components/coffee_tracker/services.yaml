@@ -198,3 +198,37 @@ get_history:
         number:
           min: 1
           mode: box
+reset_ledger:
+  name: Reset ledger
+  description: Permanently delete this pool's action history and reset its balance and coffee count to zero. Keep currency and cup price. Requires explicit confirmation and the latest revision.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Required unique ID (8–128 characters). Retry an uncertain reset with exactly the same ID and revision.
+      required: true
+      selector:
+        text: {}
+    expected_revision:
+      name: Expected revision
+      description: The balance sensor revision shown when you confirmed the reset.
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    confirmed:
+      name: Confirm permanent deletion
+      description: Must be true to delete all ledger entries, balance and coffee count. This cannot be undone.
+      required: true
+      selector:
+        boolean: {}

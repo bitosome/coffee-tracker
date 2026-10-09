@@ -1,8 +1,8 @@
 """Persistent accounting independent of Home Assistant and its UI.
 
 Amounts are cents, commits are serialized, and a save must succeed before the
-new snapshot becomes visible. The append-only journal is also the idempotency
-index: a retried operation can never silently debit the pool again after restart.
+new snapshot becomes visible. Active journal entries retain retry receipts; reset
+retires their hashed request IDs so deleted actions cannot be replayed later.
 """
 from __future__ import annotations
 
@@ -106,7 +106,19 @@ class Ledger:
             item.pop("revision")
             state["transactions"] = [item]
             await self._commit(state)
+        self._index_requests()
+
+    def _index_requests(self) -> None:
         self._requests = {item["request_key"]: item for item in self._state["transactions"] if "request_key" in item}
+        if reset := self._state.get("reset"):
+            self._requests[reset["request_key"]] = reset
+
+    @property
+    def last_action_at(self) -> str:
+        """A reset is a state change, but is deliberately absent from activity."""
+        if self._state["transactions"]:
+            return self._state["transactions"][-1]["timestamp"]
+        return self._state["reset"]["timestamp"]
 
     @staticmethod
     def _validate(state: Any) -> None:
@@ -114,14 +126,41 @@ class Ledger:
             if not isinstance(state, dict) or state["currency"] not in CURRENCIES:
                 raise ValueError
             rows = state["transactions"]
-            if not isinstance(rows, list) or not rows or (not _integer(state["revision"]) or state["revision"] != len(rows)):
+            base = state.get("base_revision", 0)
+            if not _integer(base) or base < 0 or not isinstance(rows, list) or not _integer(state["revision"]) or state["revision"] != base + len(rows):
                 raise ValueError
+            retired = state.get("retired_requests", [])
+            def is_digest(value: Any) -> bool:
+                return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+            if not isinstance(retired, list) or not all(is_digest(key) for key in retired) or len(set(retired)) != len(retired):
+                raise ValueError
+            reset = state.get("reset")
             balance = count = 0
             previous_price = None
             latest_financial = None
             ids: set[str] = set()
-            requests: set[str] = set()
-            for sequence, row in enumerate(rows, 1):
+            requests: set[str] = set(retired)
+            if base:
+                # This is the only receipt kept when deleting the journal. Its
+                # zero totals and current reset price contain no deleted values.
+                if base < 2 or not isinstance(reset, dict) or set(reset) != {"id", "sequence", "timestamp", "cup_price_minor", "balance_minor", "coffee_count", "request_key", "request_fingerprint"}:
+                    raise ValueError
+                if not _integer(reset["sequence"]) or reset["sequence"] != base or not isinstance(reset["id"], str) or not reset["id"]:
+                    raise ValueError
+                if not _integer(reset["cup_price_minor"]) or not 1 <= reset["cup_price_minor"] <= MAX_PRICE_MINOR:
+                    raise ValueError
+                if any(not _integer(reset[key]) or reset[key] != 0 for key in ("balance_minor", "coffee_count")):
+                    raise ValueError
+                if datetime.fromisoformat(reset["timestamp"]).tzinfo is None:
+                    raise ValueError
+                if not is_digest(reset["request_key"]) or not is_digest(reset["request_fingerprint"]) or reset["request_key"] in requests:
+                    raise ValueError
+                previous_price = reset["cup_price_minor"]
+                requests.add(reset["request_key"])
+                ids.add(reset["id"])
+            elif not rows or reset is not None or retired:
+                raise ValueError
+            for sequence, row in enumerate(rows, base + 1):
                 if not _integer(row["sequence"]) or row["sequence"] != sequence or row["id"] in ids or not isinstance(row["id"], str) or not row["id"]:
                     raise ValueError
                 ids.add(row["id"])
@@ -165,11 +204,12 @@ class Ledger:
                 if datetime.fromisoformat(row["timestamp"]).tzinfo is None:
                     raise ValueError
                 if "request_key" in row:
-                    if row["request_key"] in requests or not isinstance(row["request_fingerprint"], str):
+                    if not is_digest(row["request_key"]) or row["request_key"] in requests or not is_digest(row["request_fingerprint"]):
                         raise ValueError
                     requests.add(row["request_key"])
+            last = rows[-1] if rows else reset
             for key in ("balance_minor", "cup_price_minor", "coffee_count"):
-                if not _integer(state[key]) or state[key] != rows[-1][key]:
+                if not _integer(state[key]) or state[key] != last[key]:
                     raise ValueError
         except (KeyError, TypeError, ValueError, OverflowError) as err:
             raise LedgerError("invalid_storage", "The stored coffee ledger is invalid. Restore a backup; it has not been overwritten.") from err
@@ -212,12 +252,16 @@ class Ledger:
             items.append(item)
         return {"items": items, "has_more": len(rows) > limit, "next_before": items[-1]["sequence"] if len(rows) > limit else None, "revision": self._state["revision"]}
 
-    async def mutate(self, kind: str, *, amount: Any = None, expected_revision: int | None = None, request_id: str | None = None, actor: str = "Automation", actor_id: str = "automation", note: str = "", transaction_id: str | None = None) -> dict:
-        if kind not in ("add_funds", "buy_coffee", "set_balance", "set_price", "undo"):
+    async def mutate(self, kind: str, *, amount: Any = None, expected_revision: int | None = None, request_id: str | None = None, actor: str = "Automation", actor_id: str = "automation", note: str = "", transaction_id: str | None = None, confirmed: bool = False) -> dict:
+        if kind not in ("add_funds", "buy_coffee", "set_balance", "set_price", "undo", "reset_ledger"):
             raise LedgerError("invalid_action", "Unknown coffee action.")
+        if kind == "reset_ledger" and confirmed is not True:
+            raise LedgerError("confirmation_required", "Confirm that every ledger entry, the balance and the coffee count should be deleted.")
+        if kind == "reset_ledger" and request_id is None:
+            raise LedgerError("missing_request_id", "Reset requires a unique request ID so a retry cannot erase newer actions.")
         if expected_revision is not None and (not _integer(expected_revision) or expected_revision < 1):
             raise LedgerError("invalid_revision", "Provide a positive revision.")
-        if kind in ("set_balance", "set_price", "undo") and expected_revision is None:
+        if kind in ("set_balance", "set_price", "undo", "reset_ledger") and expected_revision is None:
             raise LedgerError("missing_revision", "Reload the pool before editing it.")
         if request_id is not None and (not isinstance(request_id, str) or not 8 <= len(request_id) <= 128):
             raise LedgerError("invalid_request_id", "Request IDs must have 8–128 characters.")
@@ -229,6 +273,8 @@ class Ledger:
         async with self._lock:
             if self._closed:
                 raise LedgerError("pool_unavailable", "This coffee pool is unloading. Try again after it reloads.")
+            if request_key and request_key in self._state.get("retired_requests", []):
+                raise LedgerError("request_retired", "This action belongs to a deleted ledger. Refresh the pool before creating a new action.")
             # Before revision checking: a network retry repeats the original result.
             if request_key and request_key in self._requests:
                 previous = self._requests[request_key]
@@ -238,6 +284,22 @@ class Ledger:
             if expected_revision is not None and expected_revision != self._state["revision"]:
                 raise LedgerError("stale_revision", "The pool changed in another session. Review the latest balance and try again.")
             state = deepcopy(self._state)
+            if kind == "reset_ledger":
+                state["revision"] += 1
+                state["base_revision"] = state["revision"]
+                state["balance_minor"] = state["coffee_count"] = 0
+                # Keep only one-way identifiers of deleted requests, never their
+                # amounts, actors, notes, timestamps, or old retry receipts.
+                state["retired_requests"] = sorted(set(state.get("retired_requests", [])) | self._requests.keys())
+                state["transactions"] = []
+                reset = {"id": str(uuid4()), "sequence": state["revision"], "timestamp": _timestamp(), "cup_price_minor": state["cup_price_minor"], "balance_minor": 0, "coffee_count": 0, "request_key": request_key, "request_fingerprint": fingerprint}
+                state["reset"] = reset
+                try:
+                    await self._commit(state)
+                finally:
+                    if self._state is state:
+                        self._index_requests()
+                return self._response(reset)
             delta = 0
             count = state["coffee_count"]
             extra: dict = {}

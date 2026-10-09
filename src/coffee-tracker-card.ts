@@ -21,6 +21,7 @@ import type {
   HistoryResponse,
   HomeAssistant,
   Receipt,
+  Pool,
 } from "./types";
 import "./editor";
 interface FailedRequest {
@@ -50,6 +51,9 @@ export class CoffeeTrackerCard extends LitElement {
     spent: { state: true },
     failed: { state: true },
     undoConfirm: { state: true },
+    activityExpanded: { state: true },
+    resetOpen: { state: true },
+    resetSnapshot: { state: true },
   };
   static styles = [designTokens, styles];
   hass?: HomeAssistant;
@@ -71,6 +75,9 @@ export class CoffeeTrackerCard extends LitElement {
   private spent = 0;
   private failed: FailedRequest | null = null;
   private undoConfirm = false;
+  private activityExpanded = false;
+  private resetOpen = false;
+  private resetSnapshot: Pool | null = null;
   private formRevision = 0;
   private historyGeneration = 0;
   private observed = "";
@@ -85,6 +92,10 @@ export class CoffeeTrackerCard extends LitElement {
     if (config.title !== undefined && typeof config.title !== "string")
       throw new Error("Title must be text.");
     if (this.config?.entity !== config.entity) {
+      this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+      this.resetOpen = false;
+      this.resetSnapshot = null;
+      this.activityExpanded = false;
       this.historyGeneration++;
       this.history = [];
       this.hasMore = false;
@@ -112,7 +123,7 @@ export class CoffeeTrackerCard extends LitElement {
     };
   }
   getCardSize() {
-    return 7;
+    return this.activityExpanded ? 7 : 4;
   }
   getGridOptions() {
     return { columns: 12, rows: "auto", min_columns: 6 };
@@ -122,6 +133,12 @@ export class CoffeeTrackerCard extends LitElement {
   }
   private get online() {
     return this.hass?.connected !== false && !!this.pool;
+  }
+  private get supportsReset() {
+    return (
+      this.hass?.states[this.config?.entity || ""]?.attributes
+        .supports_reset === true
+    );
   }
   private get locale() {
     return this.hass?.locale?.language || this.hass?.language || "en";
@@ -215,6 +232,148 @@ export class CoffeeTrackerCard extends LitElement {
     this.settings = false;
     this.formError = "";
   }
+  private async openReset() {
+    if (
+      this.pending ||
+      !this.online ||
+      !this.supportsReset ||
+      (this.failed && this.failed.name !== "reset_ledger")
+    )
+      return;
+    if (this.failed?.name !== "reset_ledger") {
+      this.resetSnapshot = { ...this.pool! };
+      this.error = "";
+    }
+    this.resetOpen = true;
+    this.undoConfirm = false;
+    await this.updateComplete;
+    const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog");
+    if (dialog && !dialog.open) dialog.showModal();
+    dialog
+      ?.querySelector<HTMLButtonElement>('[data-action="cancel-reset"]')
+      ?.focus();
+  }
+  private closeReset() {
+    if (this.pending) return;
+    this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+    this.resetOpen = false;
+    void this.updateComplete.then(() => {
+      const resetButton = this.renderRoot.querySelector<HTMLButtonElement>(
+        '[data-action="reset"]',
+      );
+      if (resetButton && !resetButton.disabled) resetButton.focus();
+      else
+        this.renderRoot
+          .querySelector<HTMLButtonElement>('[data-action="settings"]')
+          ?.focus();
+    });
+  }
+  private confirmReset() {
+    if (!this.resetOpen || !this.resetSnapshot || !this.supportsReset) return;
+    if (this.failed?.name === "reset_ledger") {
+      void this.mutate(
+        this.failed.name,
+        this.failed.data,
+        this.failed.label,
+        this.failed,
+      );
+    } else if (this.pool?.revision === this.resetSnapshot.revision) {
+      void this.mutate(
+        "reset_ledger",
+        {
+          confirmed: true,
+          expected_revision: this.resetSnapshot.revision,
+        },
+        "Ledger reset. Previous activity was deleted.",
+      );
+    }
+  }
+  private resetDialog(title: string) {
+    if (!this.resetOpen || !this.resetSnapshot) return nothing;
+    const uncertain = this.failed?.name === "reset_ledger";
+    const stale =
+      !uncertain && this.pool?.revision !== this.resetSnapshot.revision;
+    return html`<dialog
+      class="reset-dialog"
+      aria-labelledby="reset-title"
+      aria-describedby="reset-description"
+      aria-modal="true"
+      @cancel=${(event: Event) => {
+        event.preventDefault();
+        this.closeReset();
+      }}
+    >
+      <div class="reset-heading">
+        <ha-icon icon="mdi:delete-outline" aria-hidden="true"></ha-icon>
+        <h2 id="reset-title">Reset ledger?</h2>
+      </div>
+      <p id="reset-description">
+        Delete all activity in <strong>${title}</strong> and reset its balance
+        and coffee count to zero. This affects everyone using this pool and
+        cannot be undone.
+      </p>
+      <div class="reset-summary">
+        <span
+          >Current balance<strong
+            >${money(this.resetSnapshot.balance, this.resetSnapshot.currency, this.locale)}</strong
+          ></span
+        >
+        <span
+          >Coffees recorded<strong>${this.resetSnapshot.count}</strong></span
+        >
+      </div>
+      <p class="hint">
+        Cup price
+        (${money(this.resetSnapshot.price, this.resetSnapshot.currency, this.locale)})
+        and currency (${this.resetSnapshot.currency}) stay the same.
+      </p>
+      ${
+        this.error
+          ? html`<div class="notice error" role="alert">
+              ${this.error}
+              ${uncertain ? html`<p class="hint">The reset was not confirmed. Retry the same request safely, or close and check the balance and activity. A retry will not delete any activity recorded after a completed reset.</p>` : nothing}
+            </div>`
+          : nothing
+      }
+      ${
+        stale
+          ? html`<p class="form-error" role="status">
+                The pool changed since you opened this confirmation. Review the
+                latest balance before resetting.
+              </p>
+              <button
+                class="text-button"
+                data-action="review-reset"
+                ?disabled=${this.pending || !this.online}
+                @click=${() => {
+                  this.resetSnapshot = { ...this.pool! };
+                  this.error = "";
+                }}
+              >
+                Review latest balance
+              </button>`
+          : nothing
+      }
+      <div class="reset-actions">
+        <button
+          class="reset-cancel"
+          data-action="cancel-reset"
+          ?disabled=${this.pending}
+          @click=${this.closeReset}
+        >
+          ${uncertain ? "Close" : "Cancel"}
+        </button>
+        <button
+          class="reset-confirm"
+          data-action="confirm-reset"
+          ?disabled=${this.pending || !this.online || !this.supportsReset || stale}
+          @click=${this.confirmReset}
+        >
+          ${this.pending ? "Resetting…" : uncertain ? "Retry reset" : "Reset ledger"}
+        </button>
+      </div>
+    </dialog>`;
+  }
   private async mutate(
     name: string,
     data: Record<string, unknown>,
@@ -257,6 +416,22 @@ export class CoffeeTrackerCard extends LitElement {
       this.settings = false;
       this.undoConfirm = false;
       this.feedback = request.label;
+      if (request.name === "reset_ledger") {
+        this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+        this.resetOpen = false;
+        this.resetSnapshot = null;
+        this.history = [];
+        this.hasMore = false;
+        this.nextBefore = null;
+        this.activityExpanded = false;
+        clearTimeout(this.animationTimer);
+        this.celebrating = false;
+        void this.updateComplete.then(() =>
+          this.renderRoot
+            .querySelector<HTMLButtonElement>('[data-action="settings"]')
+            ?.focus(),
+        );
+      }
       if (request.name === "buy_coffee") {
         this.spent = receipt.cup_price_minor;
         this.celebrating = false;
@@ -490,7 +665,6 @@ export class CoffeeTrackerCard extends LitElement {
             <div class="brand">${icon("coffee")}</div>
             <div class="identity">
               <h1>${title}</h1>
-              <div class="subtitle">${icon("users")} A shared coffee pool</div>
             </div>
             <button
               class="icon-button"
@@ -503,7 +677,7 @@ export class CoffeeTrackerCard extends LitElement {
                 this.mode = null;
               }}
             >
-              ${icon("settings")}
+              <ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon>
             </button>
           </header>
           ${
@@ -582,7 +756,7 @@ export class CoffeeTrackerCard extends LitElement {
                     </section>
                   </div>
                   ${!this.online ? html`<p class="notice" role="status">Home Assistant is disconnected. Reconnect to record a coffee.</p>` : nothing}${pool.balance < pool.price && pool.balance >= 0 ? html`<p class="notice">Time for a top-up. You can still record a coffee; the balance will go below zero.</p>` : nothing}${
-                    this.error
+                    this.error && !this.resetOpen
                       ? html`<div class="notice error" role="alert">
                           ${this.error}
                           <div class="hint">
@@ -596,7 +770,9 @@ export class CoffeeTrackerCard extends LitElement {
                                     data-action="retry"
                                     ?disabled=${this.pending || !this.online}
                                     @click=${() => {
-                                      if (this.failed)
+                                      if (this.failed?.name === "reset_ledger")
+                                        void this.openReset();
+                                      else if (this.failed)
                                         void this.mutate(
                                           this.failed.name,
                                           this.failed.data,
@@ -605,7 +781,7 @@ export class CoffeeTrackerCard extends LitElement {
                                         );
                                     }}
                                   >
-                                    Retry
+                                    ${this.failed.name === "reset_ledger" ? "Review reset" : "Retry"}
                                   </button>`
                                 : nothing
                             }<button
@@ -660,6 +836,22 @@ export class CoffeeTrackerCard extends LitElement {
                                 ></span
                               >${icon("arrow")}
                             </button>
+                            <button
+                              class="settings-option danger-option"
+                              data-action="reset"
+                              ?disabled=${blocked || !this.supportsReset}
+                              @click=${this.openReset}
+                            >
+                              <span
+                                >Reset ledger<small
+                                  >${this.supportsReset ? "Delete activity and start the balance at zero" : "Restart Home Assistant after updating to enable reset"}</small
+                                ></span
+                              >
+                              <ha-icon
+                                icon="mdi:delete-outline"
+                                aria-hidden="true"
+                              ></ha-icon>
+                            </button>
                           </div>
                           <p class="hint">
                             Your balance and history are saved in Home
@@ -668,67 +860,91 @@ export class CoffeeTrackerCard extends LitElement {
                         </section>`
                       : nothing
                   }${this.editPanel()}
-                  <div class="history-head">
-                    <h2>Activity</h2>
-                    <span class="count"
-                      >${pool.count} ${pool.count === 1 ? "coffee" : "coffees"}
-                      enjoyed</span
+                  <h2 class="history-heading">
+                    <button
+                      class="history-head"
+                      data-action="activity"
+                      aria-expanded=${this.activityExpanded}
+                      aria-controls="coffee-activity"
+                      @click=${() => {
+                        this.activityExpanded = !this.activityExpanded;
+                        this.undoConfirm = false;
+                      }}
                     >
-                  </div>
-                  <section
-                    class="surface history"
-                    aria-label="Coffee pool history"
-                    aria-busy=${this.historyLoading}
-                  >
-                    ${this.history.length ? this.history.map((item) => this.entry(item)) : html`<div class="empty">${this.historyLoading ? "Loading activity…" : html`<strong>Your coffee story starts here.</strong>Add a contribution, then record your first coffee.`}</div>`}
-                  </section>
-                  ${this.historyError ? html`<p class="feedback" role="status">History could not be loaded. ${this.historyError}<button class="text-button" ?disabled=${this.historyLoading || !this.online} @click=${() => this.loadHistory()}>Try again</button></p>` : nothing}
-                  <div class="history-actions">
+                      <span>Activity</span>
+                      <span class="count"
+                        >${pool.count}
+                        ${pool.count === 1 ? "coffee" : "coffees"} enjoyed</span
+                      >
+                      <ha-icon
+                        icon=${this.activityExpanded ? "mdi:chevron-up" : "mdi:chevron-down"}
+                        aria-hidden="true"
+                      ></ha-icon>
+                    </button>
+                  </h2>
+                  <div id="coffee-activity" ?hidden=${!this.activityExpanded}>
                     ${
-                      latest
-                        ? html`<button
-                            class="text-button"
-                            data-action="undo"
-                            ?disabled=${blocked || this.historyLoading}
-                            @click=${() => {
-                              this.undoConfirm = !this.undoConfirm;
-                            }}
-                          >
-                            ${icon("undo")} Undo last action
-                          </button>`
-                        : html`<span></span>`
-                    }${this.hasMore ? html`<button class="text-button" data-action="more" ?disabled=${this.historyLoading || !this.online} @click=${() => this.loadHistory(true)}>${this.historyLoading ? "Loading…" : "Older activity"} ${icon("arrow")}</button>` : nothing}
-                  </div>
-                  ${
-                    this.undoConfirm && latest
-                      ? html`<div class="surface undo-confirm">
-                          <p class="hint">
-                            Undo
-                            “${actionLabels[latest.kind] || "last action"}”? A
-                            reversal will be added to the history.
-                          </p>
-                          <button
-                            class="text-button"
-                            data-action="confirm-undo"
-                            ?disabled=${blocked}
-                            @click=${() => this.mutate("undo", { transaction_id: latest.id, expected_revision: pool.revision }, "Last action undone.")}
-                          >
-                            Undo action</button
-                          ><button
-                            class="text-button"
-                            ?disabled=${this.pending}
-                            @click=${() => {
-                              this.undoConfirm = false;
-                            }}
-                          >
-                            Keep it
-                          </button>
-                        </div>`
-                      : nothing
-                  }`
+                      this.activityExpanded
+                        ? html`<section
+                              class="surface history"
+                              aria-label="Coffee pool history"
+                              aria-busy=${this.historyLoading}
+                            >
+                              ${this.history.length ? this.history.map((item) => this.entry(item)) : html`<div class="empty">${this.historyLoading ? "Loading activity…" : html`<strong>Your coffee story starts here.</strong>Add a contribution, then record your first coffee.`}</div>`}
+                            </section>
+                            ${this.historyError ? html`<p class="feedback" role="status">History could not be loaded. ${this.historyError}<button class="text-button" ?disabled=${this.historyLoading || !this.online} @click=${() => this.loadHistory()}>Try again</button></p>` : nothing}
+                            <div class="history-actions">
+                              ${
+                                latest
+                                  ? html`<button
+                                      class="text-button"
+                                      data-action="undo"
+                                      ?disabled=${blocked || this.historyLoading}
+                                      @click=${() => {
+                                        this.undoConfirm = !this.undoConfirm;
+                                      }}
+                                    >
+                                      ${icon("undo")} Undo last action
+                                    </button>`
+                                  : html`<span></span>`
+                              }${this.hasMore ? html`<button class="text-button" data-action="more" ?disabled=${this.historyLoading || !this.online} @click=${() => this.loadHistory(true)}>${this.historyLoading ? "Loading…" : "Older activity"} ${icon("arrow")}</button>` : nothing}
+                            </div>
+                            ${
+                              this.activityExpanded &&
+                              this.undoConfirm &&
+                              latest
+                                ? html`<div class="surface undo-confirm">
+                                    <p class="hint">
+                                      Undo
+                                      “${actionLabels[latest.kind] || "last action"}”?
+                                      A reversal will be added to the history.
+                                    </p>
+                                    <button
+                                      class="text-button"
+                                      data-action="confirm-undo"
+                                      ?disabled=${blocked}
+                                      @click=${() => this.mutate("undo", { transaction_id: latest.id, expected_revision: pool.revision }, "Last action undone.")}
+                                    >
+                                      Undo action</button
+                                    ><button
+                                      class="text-button"
+                                      ?disabled=${this.pending}
+                                      @click=${() => {
+                                        this.undoConfirm = false;
+                                      }}
+                                    >
+                                      Keep it
+                                    </button>
+                                  </div>`
+                                : nothing
+                            }`
+                        : nothing
+                    }
+                  </div>`
           }
         </div>
-      </div></ha-card
+      </div>
+      ${this.resetDialog(title)}</ha-card
     >`;
   }
 }

@@ -20,6 +20,7 @@ export function createMockPool({
     fail = failOnce;
   let actions = [],
     receipts = new Map(),
+    retiredRequests = new Set(),
     listeners = new Set();
   const calls = [];
   function event(kind, delta, actor = "Alex", note = "", undo_of) {
@@ -60,6 +61,7 @@ export function createMockPool({
         integration: "coffee_tracker",
         pool_id: "synthetic-demo",
         currency: "EUR",
+        supports_reset: true,
         balance_minor: currentBalance,
         cup_price_minor: currentPrice,
         revision,
@@ -101,6 +103,12 @@ export function createMockPool({
         },
       };
     }
+    if (retiredRequests.has(data.request_id))
+      throw {
+        code: "service_validation_error",
+        message:
+          "This request belongs to a deleted ledger. Review the current pool.",
+      };
     if (receipts.has(data.request_id))
       return { response: receipts.get(data.request_id) };
     if (fail) {
@@ -111,9 +119,38 @@ export function createMockPool({
       data.expected_revision !== undefined &&
       data.expected_revision !== revision
     )
-      throw new Error(
-        "The pool changed. Dismiss this request and review the latest balance.",
-      );
+      throw {
+        code: "service_validation_error",
+        message: "The pool changed. Review the latest balance.",
+      };
+    if (name === "reset_ledger") {
+      if (
+        data.confirmed !== true ||
+        !data.request_id ||
+        data.expected_revision === undefined
+      )
+        throw {
+          code: "service_validation_error",
+          message: "Reset requires confirmation and the current revision.",
+        };
+      for (const id of receipts.keys()) retiredRequests.add(id);
+      receipts.clear();
+      actions = [];
+      currentBalance = 0;
+      count = 0;
+      revision++;
+      const receipt = {
+        balance_minor: 0,
+        cup_price_minor: currentPrice,
+        coffee_count: 0,
+        currency: "EUR",
+        revision,
+        transaction_id: `reset-${++sequence}`,
+      };
+      receipts.set(data.request_id, receipt);
+      publish();
+      return { response: receipt };
+    }
     let delta = 0,
       undoOf;
     const amount = Math.round(Number(data.amount) * 100);

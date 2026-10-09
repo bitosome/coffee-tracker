@@ -1,4 +1,4 @@
-"""Coffee pool balance and lifetime consumption."""
+"""Coffee pool balance and consumption since the last reset."""
 from decimal import Decimal
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -27,8 +27,7 @@ class BalanceSensor(CoffeeEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         snapshot = self.pool.ledger.snapshot
-        latest = self.pool.ledger.history(limit=1)["items"][0]
-        return {"integration": "coffee_tracker", "pool_id": self.pool.entry.entry_id, **snapshot, "last_action_at": latest["timestamp"], "price_entity_id": self.pool.entity_id("number", "cup_price"), "coffee_button_entity_id": self.pool.entity_id("button", "buy_coffee")}
+        return {"integration": "coffee_tracker", "pool_id": self.pool.entry.entry_id, **snapshot, "last_action_at": self.pool.ledger.last_action_at, "supports_reset": True, "price_entity_id": self.pool.entity_id("number", "cup_price"), "coffee_button_entity_id": self.pool.entity_id("button", "buy_coffee")}
 
 
 class CoffeesSensor(CoffeeEntity, SensorEntity):

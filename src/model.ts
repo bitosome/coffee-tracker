@@ -107,6 +107,10 @@ export function isRejectedAction(error: unknown): boolean {
       "invalid_request",
       "nothing_to_undo",
       "cannot_undo",
+      "request_retired",
+      "request_conflict",
+      "confirmation_required",
+      "missing_request_id",
     ].includes(detail.code || "") ||
     [
       "stale_revision",
@@ -114,6 +118,10 @@ export function isRejectedAction(error: unknown): boolean {
       "invalid_request",
       "nothing_to_undo",
       "cannot_undo",
+      "request_retired",
+      "request_conflict",
+      "confirmation_required",
+      "missing_request_id",
     ].includes(detail.translation_key || "")
   );
 }

@@ -62,3 +62,8 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+## Standalone preview icons
+
+The standalone preview uses Material Design Icons cog, chevron-up/down and delete-outline paths from Pictogrammers. These are preview-only fixtures; the installed card uses Home Assistant's native `ha-icon` component. Source: https://pictogrammers.com/library/mdi/ . The Pictogrammers notice and Apache 2.0 license are included in `preview/LICENSE-MDI`.

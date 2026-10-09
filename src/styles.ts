@@ -62,6 +62,13 @@ export const styles = css`
     height: 21px;
     flex: 0 0 21px;
   }
+  ha-icon {
+    display: block;
+    width: 21px;
+    height: 21px;
+    flex: 0 0 21px;
+    --mdc-icon-size: 21px;
+  }
   .top {
     display: flex;
     align-items: center;
@@ -87,19 +94,6 @@ export const styles = css`
     letter-spacing: -0.025em;
     margin: 0;
     overflow-wrap: anywhere;
-  }
-  .subtitle {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    color: var(--coffee-muted);
-    margin-top: 4px;
-  }
-  .subtitle .icon {
-    width: 12px;
-    height: 12px;
-    flex-basis: 12px;
   }
   .icon-button {
     min-width: 44px;
@@ -408,15 +402,33 @@ export const styles = css`
     color: var(--coffee-muted);
     margin: 0;
   }
+  .history-heading {
+    margin: 0;
+  }
   .history-head {
-    padding: 5px 7px 0;
+    padding: 5px 7px;
+    width: 100%;
+    min-height: 44px;
+    border-radius: 12px;
+    background: transparent;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 650;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
   }
-  .history-head h2 {
-    font-size: 14px;
+  .history-head .count {
+    margin-left: auto;
+    font-weight: 400;
+  }
+  #coffee-activity:not([hidden]) {
+    display: grid;
+    gap: var(--large-gap);
+  }
+  #coffee-activity[hidden] {
+    display: none;
   }
   .count {
     font-size: 11px;
@@ -588,6 +600,82 @@ export const styles = css`
   }
   .settings-option .icon {
     color: var(--coffee-muted);
+  }
+  .danger-option {
+    color: var(--error-color, var(--status-alert-color));
+  }
+  .reset-dialog {
+    width: min(420px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    overflow: auto;
+    padding: 24px;
+    border: 1px solid var(--divider-color, #0002);
+    border-radius: var(--tile-border-radius);
+    background: var(--coffee-surface);
+    color: var(--primary-text-color, #26352f);
+    box-shadow: 0 18px 70px #0005;
+    margin: auto;
+  }
+  .reset-dialog::backdrop {
+    background: #0008;
+    backdrop-filter: blur(3px);
+  }
+  .reset-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .reset-heading ha-icon {
+    color: var(--error-color, var(--status-alert-color));
+  }
+  .reset-dialog > p {
+    font-size: 13px;
+    line-height: 1.65;
+    margin: 16px 0;
+  }
+  .reset-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    padding: 14px;
+    background: var(--coffee-tile);
+    border-radius: 12px;
+    margin: 14px 0;
+  }
+  .reset-summary span {
+    flex: 1;
+    font-size: 11px;
+    color: var(--coffee-muted);
+  }
+  .reset-summary strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 19px;
+    color: var(--primary-text-color, #26352f);
+  }
+  .reset-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 22px;
+  }
+  .reset-actions button {
+    flex: 1;
+    min-height: 46px;
+    padding: 10px 14px;
+    border-radius: var(--chip-border-radius);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .reset-cancel {
+    background: var(--coffee-tile);
+  }
+  .reset-confirm {
+    background: color-mix(
+      in srgb,
+      var(--error-color, var(--status-alert-color)) 85%,
+      #000
+    );
+    color: var(--status-icon-on-color, #fff);
   }
   @keyframes cup-cheers {
     0%,

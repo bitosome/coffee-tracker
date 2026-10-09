@@ -18,7 +18,9 @@ Requires Home Assistant 2026.3 or later.
 2. Download **Coffee Tracker** and restart Home Assistant.
 3. Open **Settings → Devices & services → Add integration → Coffee Tracker**.
 4. Enter a pool name, currency, price per cup, and opening balance. Each additional integration entry creates a separate pool.
-5. Add **Coffee Tracker** to your dashboard using the card picker. Select the pool's balance sensor.
+5. Reload your browser/dashboard, then add **Coffee Tracker** using the card picker. Select the pool's balance sensor.
+
+**Installing in HACS only downloads the files. Configure the first pool in Devices & services before looking for the card.**
 
 The card ships inside the integration. It does not need a separate HACS Dashboard repository. Storage-mode dashboard resources are registered automatically. If you manage resources in YAML, add the JavaScript module described below.
 
@@ -35,7 +37,7 @@ For YAML-managed Lovelace resources:
 ```yaml
 lovelace:
   resources:
-    - url: /coffee_tracker/coffee-tracker-card.js?v=0.1.0
+    - url: /coffee_tracker/coffee-tracker-card.js?v=0.2.0
       type: module
 ```
 
@@ -45,7 +47,11 @@ If the card is missing after an update, reload the dashboard. Check the resource
 
 Tap **Add money** to record a contribution. Set the price per cup in the card settings or through the integration's number entity. **Coffee purchased** subtracts the current price and records one coffee. Changing the price never rewrites old purchases.
 
+**Activity** starts collapsed. Tap its heading to expand the history, load older entries, or undo the latest eligible action.
+
 **Adjust balance** sets an absolute balance and records the difference, which is useful for correcting a mistake or reconciling the pool. Add a note to explain a correction. **Undo** creates a reversal of the latest eligible financial action; it never erases history.
+
+Open the cog **Settings → Reset ledger** to start over. The confirmation dialog explains that reset deletes **all activity entries**, sets the balance and coffee count to **zero**, and affects everyone using this pool. The currency and cup price stay unchanged. Cancel or Escape leaves the ledger untouched. Reset cannot be undone in the card; restoring a Home Assistant backup is the recovery option. If another user changes the pool while the dialog is open, review the latest balance in the dialog before confirming again.
 
 A balance may go below zero. This is a record of coffee consumption, so a coffee can still be logged when the pool needs a top-up. The card shows the shortfall. No payment is collected or transferred by this integration.
 
@@ -72,9 +78,13 @@ One completed script run records one cup at the current price. Separate presses 
 
 The balance sensor can also be used in a Watch complication. Attribution is the Home Assistant user when the action carries a user context, otherwise **Automation**.
 
+## Updating
+
+After updating in HACS, restart Home Assistant to load the backend, then reload your dashboard. Version 0.2.0 adds the reset action; until the backend has restarted, the card keeps Reset unavailable and explains why.
+
 ## Data and maintenance
 
-The ledger lives in Home Assistant's `.storage` directory and survives normal restarts and integration reloads. Include Home Assistant configuration storage in backups. The browser only displays the server's state. History is retained without an automatic age limit. Removing an integration entry leaves its ledger file available for recovery, but adding a new pool creates a new identity and does not automatically reconnect that old file. Back up the pool before removing the entry.
+The ledger lives in Home Assistant's `.storage` directory and survives normal restarts and integration reloads. Include Home Assistant configuration storage in backups. The browser only displays the server's state. History is retained without an automatic age limit unless you explicitly confirm Reset ledger. Reset clears Coffee Tracker's journal; it does not purge existing Home Assistant backups or Recorder sensor history. The integration retains only non-reversible request hashes from erased actions to prevent an old network retry from recreating them. Removing an integration entry leaves its ledger file available for recovery, but adding a new pool creates a new identity and does not automatically reconnect that old file. Back up the pool before removing the entry.
 
 Currency is fixed when a pool is created, preventing old transactions from silently changing units. Supported currencies use two decimal places. Prices and amounts accept up to two decimal places. History is retrieved in pages rather than copied into every sensor state. It is kept independently from Home Assistant Recorder retention.
 

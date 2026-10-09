@@ -142,6 +142,34 @@
     <script type="module">
       import "../custom_components/coffee_tracker/www/coffee-tracker-card.js";
       import { createMockPool, mockConfig } from "./fixtures.mjs";
+      // Preview only: Home Assistant supplies ha-icon in the installed card.
+      // These Material Design Icons paths keep the standalone demo faithful.
+      const mdiPaths = {
+        "mdi:cog":
+          "M19.43 12.98C19.47 12.66 19.5 12.34 19.5 12S19.47 11.34 19.42 11.02L21.53 9.37C21.72 9.22 21.77 8.95 21.65 8.73L19.65 5.27C19.53 5.05 19.27 4.97 19.05 5.05L16.56 6.05C16.04 5.65 15.49 5.32 14.88 5.07L14.5 2.42C14.46 2.18 14.25 2 14 2H10C9.75 2 9.54 2.18 9.5 2.42L9.12 5.07C8.51 5.32 7.95 5.66 7.44 6.05L4.95 5.05C4.72 4.96 4.47 5.05 4.35 5.27L2.35 8.73C2.22 8.95 2.28 9.22 2.47 9.37L4.58 11.02C4.53 11.34 4.5 11.67 4.5 12S4.53 12.66 4.58 12.98L2.47 14.63C2.28 14.78 2.23 15.05 2.35 15.27L4.35 18.73C4.47 18.95 4.73 19.03 4.95 18.95L7.44 17.95C7.96 18.35 8.51 18.68 9.12 18.93L9.5 21.58C9.54 21.82 9.75 22 10 22H14C14.25 22 14.46 21.82 14.5 21.58L14.88 18.93C15.49 18.68 16.05 18.35 16.56 17.95L19.05 18.95C19.28 19.04 19.53 18.95 19.65 18.73L21.65 15.27C21.77 15.05 21.72 14.78 21.53 14.63L19.43 12.98M12 15.5A3.5 3.5 0 1 1 12 8.5A3.5 3.5 0 0 1 12 15.5Z",
+        "mdi:chevron-down":
+          "M7.41 8.59L12 13.17L16.59 8.59L18 10L12 16L6 10L7.41 8.59Z",
+        "mdi:chevron-up":
+          "M7.41 15.41L12 10.83L16.59 15.41L18 14L12 8L6 14L7.41 15.41Z",
+        "mdi:delete-outline":
+          "M6 19A2 2 0 0 0 8 21H16A2 2 0 0 0 18 19V7H6V19M8 9H16V19H8V9M15.5 4L14.5 3H9.5L8.5 4H5V6H19V4H15.5Z",
+      };
+      customElements.define(
+        "ha-icon",
+        class extends HTMLElement {
+          static observedAttributes = ["icon"];
+          connectedCallback() {
+            this.render();
+          }
+          attributeChangedCallback() {
+            this.render();
+          }
+          render() {
+            if (!this.shadowRoot) this.attachShadow({ mode: "open" });
+            this.shadowRoot.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" style="display:block;width:100%;height:100%;fill:currentColor"><path d="${mdiPaths[this.getAttribute("icon")] || ""}"></path></svg>`;
+          }
+        },
+      );
       const card = document.querySelector("coffee-tracker-card");
       card.setConfig(mockConfig);
       let pool, off;

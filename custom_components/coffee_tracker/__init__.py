@@ -29,6 +29,7 @@ SCHEMAS = {
     "set_price": {**MUTATION, vol.Required("amount"): AMOUNT, vol.Required("expected_revision"): REVISION},
     "buy_coffee": {**MUTATION, vol.Optional("expected_revision"): REVISION},
     "undo": {**MUTATION, vol.Required("transaction_id"): str, vol.Required("expected_revision"): REVISION},
+    "reset_ledger": {**BASE, vol.Required("request_id"): vol.All(str, vol.Length(min=8, max=128)), vol.Required("confirmed"): vol.All(bool, True), vol.Required("expected_revision"): REVISION},
     "get_history": {**BASE, vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=100)), vol.Optional("before"): vol.All(int, vol.Range(min=1))},
 }
 
