@@ -1,0 +1,200 @@
+add_funds:
+  name: Add money
+  description: Add a contribution to a shared coffee pool.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Optional unique ID (8–128 characters); retry the same request with
+        the same ID after a connection error.
+      selector:
+        text: {}
+    amount:
+      name: Amount
+      description: An amount in the pool currency with up to two decimal places.
+      required: true
+      example: '2.50'
+      selector:
+        text: {}
+    note:
+      name: Note
+      description: Optional description, up to 250 characters.
+      selector:
+        text: {}
+set_balance:
+  name: Adjust balance
+  description: Set an absolute balance. Use the current balance sensor revision to
+    avoid overwriting another person’s change.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Optional unique ID (8–128 characters); retry the same request with
+        the same ID after a connection error.
+      selector:
+        text: {}
+    amount:
+      name: Amount
+      description: An amount in the pool currency with up to two decimal places.
+      required: true
+      example: '2.50'
+      selector:
+        text: {}
+    expected_revision:
+      name: Expected revision
+      description: The current revision attribute of the balance sensor.
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    note:
+      name: Note
+      description: Optional description, up to 250 characters.
+      selector:
+        text: {}
+set_price:
+  name: Set cup price
+  description: Change the price for future coffees only.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Optional unique ID (8–128 characters); retry the same request with
+        the same ID after a connection error.
+      selector:
+        text: {}
+    amount:
+      name: Amount
+      description: An amount in the pool currency with up to two decimal places.
+      required: true
+      example: '2.50'
+      selector:
+        text: {}
+    expected_revision:
+      name: Expected revision
+      description: The current revision attribute of the balance sensor.
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+buy_coffee:
+  name: Buy coffee
+  description: Record one coffee at the current price. A negative balance is permitted.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Optional unique ID (8–128 characters); retry the same request with
+        the same ID after a connection error.
+      selector:
+        text: {}
+    expected_revision:
+      name: Expected revision
+      description: The current revision attribute of the balance sensor.
+      required: false
+      selector:
+        number:
+          min: 1
+          mode: box
+undo:
+  name: Undo latest action
+  description: Append a correction for the latest financial action. Earlier history
+    is preserved.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    request_id:
+      name: Request ID
+      description: Optional unique ID (8–128 characters); retry the same request with
+        the same ID after a connection error.
+      selector:
+        text: {}
+    expected_revision:
+      name: Expected revision
+      description: The current revision attribute of the balance sensor.
+      required: true
+      selector:
+        number:
+          min: 1
+          mode: box
+    transaction_id:
+      name: Transaction ID
+      required: true
+      description: ID of the latest undoable entry from get_history.
+      selector:
+        text: {}
+get_history:
+  name: Get history
+  description: Read the shared persisted action history, newest first.
+  fields:
+    entity_id:
+      name: Balance sensor
+      description: The Coffee Tracker balance sensor for this pool.
+      required: true
+      selector:
+        entity:
+          filter:
+          - domain: sensor
+            integration: coffee_tracker
+            device_class: monetary
+    limit:
+      name: Limit
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 100
+          mode: box
+    before:
+      name: Before sequence
+      description: Use next_before from the preceding page to load older actions.
+      selector:
+        number:
+          min: 1
+          mode: box

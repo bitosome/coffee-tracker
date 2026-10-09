@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create a shared coffee pool",
+        "description": "Everyone with access to this pool shares its balance, cup price and history. Negative balances are allowed so every coffee can be recorded. Currency cannot be changed later.",
+        "data": {"name": "Pool name", "currency": "Currency", "cup_price": "Price per cup", "opening_balance": "Opening balance"},
+        "data_description": {"cup_price": "A positive amount with up to two decimal places, for example 2.00.", "opening_balance": "The total money already in this pool."}
+      }
+    },
+    "error": {"invalid_amount": "Enter valid amounts with up to two decimal places. Cup price must be between 0.01 and 10000.", "invalid_name": "Enter a pool name with 1–80 characters.", "invalid_currency": "Choose a supported currency."}
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "domain": "coffee_tracker",
+  "name": "Coffee Tracker",
+  "codeowners": ["@bitosome"],
+  "config_flow": true,
+  "dependencies": ["frontend"],
+  "documentation": "https://github.com/bitosome/coffee-tracker",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/bitosome/coffee-tracker/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

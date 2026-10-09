@@ -1,0 +1,31 @@
+{
+  "name": "coffee-tracker",
+  "version": "0.1.0",
+  "description": "A shared coffee pool integration and card for Home Assistant.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bitosome/coffee-tracker.git"
+  },
+  "scripts": {
+    "build": "rollup -c",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm run build && npm test",
+    "preview": "node preview/server.mjs"
+  },
+  "dependencies": {
+    "lit": "^3.3.1"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@rollup/plugin-typescript": "^12.1.4",
+    "happy-dom": "^20.10.6",
+    "prettier": "^3.9.9",
+    "rollup": "^4.44.1",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3"
+  }
+}
