@@ -37,7 +37,7 @@ For YAML-managed Lovelace resources:
 ```yaml
 lovelace:
   resources:
-    - url: /coffee_tracker/coffee-tracker-card.js?v=0.2.0
+    - url: /coffee_tracker/coffee-tracker-card.js?v=0.2.1
       type: module
 ```
 
@@ -95,3 +95,12 @@ See [architecture and service API](docs/architecture.md) for details and [develo
 ## License and design
 
 MIT. Shared design tokens and glow utilities come from [Space Hub Card](https://github.com/bitosome/space-hub-card); their source revisions are recorded in `src/shared/PROVENANCE.md`.
+
+## Shared design
+
+System controls use the Space Hub card-family primitives vendored in `src/shared/`.
+`DESIGN_PROVENANCE.json` pins their canonical source and hashes; update them using
+Space Hub's `scripts/sync-card-design.mjs`, never by hand. Standard controls use Home
+Assistant MDI icons; the cup remains a decorative illustration. The reset dialog has
+a fixed X header and a scrollable body. Dismissing an in-flight reset does not cancel
+it: the card retains its pending status, duplicate guard and idempotent retry receipt.

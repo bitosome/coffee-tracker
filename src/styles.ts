@@ -69,42 +69,10 @@ export const styles = css`
     flex: 0 0 21px;
     --mdc-icon-size: 21px;
   }
-  .top {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 7px 7px 4px;
-  }
   .brand {
-    display: grid;
-    place-items: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--coffee-accent) 10%, transparent);
     color: var(--coffee-accent);
   }
-  .identity {
-    min-width: 0;
-    flex: 1;
-  }
-  h1 {
-    font-size: 18px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-  .icon-button {
-    min-width: 44px;
-    min-height: 44px;
-    display: grid;
-    place-items: center;
-    background: transparent;
-    color: var(--coffee-muted);
-    border-radius: 50%;
-  }
-  .icon-button[aria-expanded="true"] {
+  .family-icon-button[aria-expanded="true"] {
     color: var(--coffee-accent);
     background: color-mix(in srgb, var(--coffee-accent) 10%, transparent);
   }
@@ -598,40 +566,16 @@ export const styles = css`
     font-size: 11px;
     margin-top: 4px;
   }
-  .settings-option .icon {
+  .settings-option ha-icon {
     color: var(--coffee-muted);
   }
   .danger-option {
     color: var(--error-color, var(--status-alert-color));
   }
-  .reset-dialog {
-    width: min(420px, calc(100vw - 32px));
-    max-height: calc(100dvh - 32px);
-    overflow: auto;
-    padding: 24px;
-    border: 1px solid var(--divider-color, #0002);
-    border-radius: var(--tile-border-radius);
-    background: var(--coffee-surface);
-    color: var(--primary-text-color, #26352f);
-    box-shadow: 0 18px 70px #0005;
-    margin: auto;
-  }
-  .reset-dialog::backdrop {
-    background: #0008;
-    backdrop-filter: blur(3px);
-  }
-  .reset-heading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .reset-heading ha-icon {
-    color: var(--error-color, var(--status-alert-color));
-  }
-  .reset-dialog > p {
+  .reset-dialog .family-dialog-body > p {
     font-size: 13px;
     line-height: 1.65;
-    margin: 16px 0;
+    margin: 0 0 16px;
   }
   .reset-summary {
     display: flex;
@@ -656,7 +600,7 @@ export const styles = css`
   .reset-actions {
     display: flex;
     gap: 10px;
-    margin-top: 22px;
+    margin-top: 0;
   }
   .reset-actions button {
     flex: 1;
@@ -669,7 +613,7 @@ export const styles = css`
   .reset-cancel {
     background: var(--coffee-tile);
   }
-  .reset-confirm {
+  .reset-actions .reset-confirm {
     background: color-mix(
       in srgb,
       var(--error-color, var(--status-alert-color)) 85%,

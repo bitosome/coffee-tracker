@@ -1,5 +1,14 @@
 import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { designTokens } from "./shared/design-tokens";
+import {
+  familyStyles,
+  headerStyles,
+  dialogStyles,
+  showFamilyDialog,
+  closeFamilyDialog,
+  disposeFamilyDialog,
+  dialogClose,
+} from "./shared/card-primitives";
 import { buildGlow } from "./shared/glow";
 import { styles } from "./styles";
 import { icon, cupArt } from "./icons";
@@ -40,6 +49,7 @@ export class CoffeeTrackerCard extends LitElement {
     historyError: { state: true },
     hasMore: { state: true },
     pending: { state: true },
+    pendingAction: { state: true },
     mode: { state: true },
     settings: { state: true },
     amount: { state: true },
@@ -55,7 +65,13 @@ export class CoffeeTrackerCard extends LitElement {
     resetOpen: { state: true },
     resetSnapshot: { state: true },
   };
-  static styles = [designTokens, styles];
+  static styles = [
+    designTokens,
+    styles,
+    familyStyles,
+    headerStyles,
+    dialogStyles,
+  ];
   hass?: HomeAssistant;
   private config?: CardConfig;
   private history: HistoryItem[] = [];
@@ -64,6 +80,7 @@ export class CoffeeTrackerCard extends LitElement {
   private hasMore = false;
   private nextBefore: number | null = null;
   private pending = false;
+  private pendingAction = "";
   private mode: EditMode = null;
   private settings = false;
   private amount = "";
@@ -92,7 +109,9 @@ export class CoffeeTrackerCard extends LitElement {
     if (config.title !== undefined && typeof config.title !== "string")
       throw new Error("Title must be text.");
     if (this.config?.entity !== config.entity) {
-      this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+      disposeFamilyDialog(
+        this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
+      );
       this.resetOpen = false;
       this.resetSnapshot = null;
       this.activityExpanded = false;
@@ -160,6 +179,10 @@ export class CoffeeTrackerCard extends LitElement {
   }
   disconnectedCallback() {
     super.disconnectedCallback();
+    disposeFamilyDialog(
+      this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
+    );
+    this.resetOpen = false;
     this.historyGeneration++;
     clearTimeout(this.animationTimer);
     this.celebrating = false;
@@ -244,18 +267,29 @@ export class CoffeeTrackerCard extends LitElement {
       this.resetSnapshot = { ...this.pool! };
       this.error = "";
     }
+    const entity = this.config?.entity;
     this.resetOpen = true;
     this.undoConfirm = false;
     await this.updateComplete;
+    if (!this.isConnected || entity !== this.config?.entity || !this.resetOpen)
+      return;
     const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog");
-    if (dialog && !dialog.open) dialog.showModal();
-    dialog
-      ?.querySelector<HTMLButtonElement>('[data-action="cancel-reset"]')
-      ?.focus();
+    if (dialog && !dialog.open)
+      showFamilyDialog(dialog, {
+        opener:
+          this.renderRoot.querySelector<HTMLElement>('[data-action="reset"]') ??
+          undefined,
+        initialFocus:
+          dialog.querySelector<HTMLElement>('[data-action="cancel-reset"]') ??
+          dialog.querySelector<HTMLElement>(".family-icon-button"),
+        onBackdrop: () => this.closeReset(),
+      });
   }
   private closeReset() {
-    if (this.pending) return;
-    this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+    // Dismissal never cancels a dispatched ledger mutation or enables a duplicate.
+    closeFamilyDialog(
+      this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
+    );
     this.resetOpen = false;
     void this.updateComplete.then(() => {
       const resetButton = this.renderRoot.querySelector<HTMLButtonElement>(
@@ -294,7 +328,7 @@ export class CoffeeTrackerCard extends LitElement {
     const stale =
       !uncertain && this.pool?.revision !== this.resetSnapshot.revision;
     return html`<dialog
-      class="reset-dialog"
+      class="reset-dialog family-dialog"
       aria-labelledby="reset-title"
       aria-describedby="reset-description"
       aria-modal="true"
@@ -303,75 +337,82 @@ export class CoffeeTrackerCard extends LitElement {
         this.closeReset();
       }}
     >
-      <div class="reset-heading">
-        <ha-icon icon="mdi:delete-outline" aria-hidden="true"></ha-icon>
+      <header class="family-dialog-header">
         <h2 id="reset-title">Reset ledger?</h2>
+        ${dialogClose("Close reset confirmation", () => this.closeReset())}
+      </header>
+      <div class="family-dialog-body">
+        <p id="reset-description">
+          Delete all activity in <strong>${title}</strong> and reset its balance
+          and coffee count to zero. This affects everyone using this pool and
+          cannot be undone.
+        </p>
+        <div class="reset-summary">
+          <span
+            >Current balance<strong
+              >${money(this.resetSnapshot.balance, this.resetSnapshot.currency, this.locale)}</strong
+            ></span
+          >
+          <span
+            >Coffees recorded<strong>${this.resetSnapshot.count}</strong></span
+          >
+        </div>
+        <p class="hint">
+          Cup price
+          (${money(this.resetSnapshot.price, this.resetSnapshot.currency, this.locale)})
+          and currency (${this.resetSnapshot.currency}) stay the same.
+        </p>
+        ${
+          this.error
+            ? html`<div class="notice error" role="alert">
+                ${this.error}
+                ${uncertain ? html`<p class="hint">The reset was not confirmed. Retry the same request safely, or close and check the balance and activity. A retry will not delete any activity recorded after a completed reset.</p>` : nothing}
+              </div>`
+            : nothing
+        }
+        ${
+          stale
+            ? html`<p class="form-error" role="status">
+                  The pool changed since you opened this confirmation. Review
+                  the latest balance before resetting.
+                </p>
+                <button
+                  class="text-button"
+                  data-action="review-reset"
+                  ?disabled=${this.pending || !this.online}
+                  @click=${() => {
+                    this.resetSnapshot = { ...this.pool! };
+                    this.error = "";
+                  }}
+                >
+                  Review latest balance
+                </button>`
+            : nothing
+        }
+        ${this.pending ? html`<p class="hint" role="status">Resetting ledger. Closing this view will not cancel the request.</p>` : nothing}
       </div>
-      <p id="reset-description">
-        Delete all activity in <strong>${title}</strong> and reset its balance
-        and coffee count to zero. This affects everyone using this pool and
-        cannot be undone.
-      </p>
-      <div class="reset-summary">
-        <span
-          >Current balance<strong
-            >${money(this.resetSnapshot.balance, this.resetSnapshot.currency, this.locale)}</strong
-          ></span
-        >
-        <span
-          >Coffees recorded<strong>${this.resetSnapshot.count}</strong></span
-        >
-      </div>
-      <p class="hint">
-        Cup price
-        (${money(this.resetSnapshot.price, this.resetSnapshot.currency, this.locale)})
-        and currency (${this.resetSnapshot.currency}) stay the same.
-      </p>
-      ${
-        this.error
-          ? html`<div class="notice error" role="alert">
-              ${this.error}
-              ${uncertain ? html`<p class="hint">The reset was not confirmed. Retry the same request safely, or close and check the balance and activity. A retry will not delete any activity recorded after a completed reset.</p>` : nothing}
-            </div>`
-          : nothing
-      }
-      ${
-        stale
-          ? html`<p class="form-error" role="status">
-                The pool changed since you opened this confirmation. Review the
-                latest balance before resetting.
-              </p>
-              <button
-                class="text-button"
-                data-action="review-reset"
-                ?disabled=${this.pending || !this.online}
-                @click=${() => {
-                  this.resetSnapshot = { ...this.pool! };
-                  this.error = "";
-                }}
+      <footer class="reset-actions family-dialog-footer">
+        ${
+          !uncertain
+            ? html`<button
+                class="reset-cancel family-action"
+                data-action="cancel-reset"
+                ?disabled=${this.pending}
+                @click=${this.closeReset}
               >
-                Review latest balance
+                Cancel
               </button>`
-          : nothing
-      }
-      <div class="reset-actions">
+            : nothing
+        }
         <button
-          class="reset-cancel"
-          data-action="cancel-reset"
-          ?disabled=${this.pending}
-          @click=${this.closeReset}
-        >
-          ${uncertain ? "Close" : "Cancel"}
-        </button>
-        <button
-          class="reset-confirm"
+          class="reset-confirm family-action"
           data-action="confirm-reset"
           ?disabled=${this.pending || !this.online || !this.supportsReset || stale}
           @click=${this.confirmReset}
         >
           ${this.pending ? "Resetting…" : uncertain ? "Retry reset" : "Reset ledger"}
         </button>
-      </div>
+      </footer>
     </dialog>`;
   }
   private async mutate(
@@ -396,6 +437,7 @@ export class CoffeeTrackerCard extends LitElement {
       entity: this.config.entity,
     };
     this.pending = true;
+    this.pendingAction = request.name;
     this.error = "";
     this.feedback = "";
     try {
@@ -417,7 +459,9 @@ export class CoffeeTrackerCard extends LitElement {
       this.undoConfirm = false;
       this.feedback = request.label;
       if (request.name === "reset_ledger") {
-        this.renderRoot?.querySelector<HTMLDialogElement>("dialog")?.close();
+        closeFamilyDialog(
+          this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
+        );
         this.resetOpen = false;
         this.resetSnapshot = null;
         this.history = [];
@@ -451,6 +495,7 @@ export class CoffeeTrackerCard extends LitElement {
       }
     } finally {
       this.pending = false;
+      this.pendingAction = "";
     }
   }
   private buy() {
@@ -548,7 +593,7 @@ export class CoffeeTrackerCard extends LitElement {
       <div class="panel-heading">
         <h2>${title}</h2>
         <button
-          class="icon-button"
+          class="family-icon-button"
           aria-label="Close settings"
           ?disabled=${this.pending}
           @click=${this.close}
@@ -661,13 +706,13 @@ export class CoffeeTrackerCard extends LitElement {
     return html`<ha-card
       ><div class="container">
         <div class="root">
-          <header class="top">
-            <div class="brand">${icon("coffee")}</div>
-            <div class="identity">
-              <h1>${title}</h1>
+          <header class="family-header">
+            <div class="brand family-brand">${icon("coffee")}</div>
+            <div class="family-identity">
+              <h1 class="family-title">${title}</h1>
             </div>
             <button
-              class="icon-button"
+              class="family-icon-button"
               data-action="settings"
               aria-label="Coffee pool settings"
               aria-expanded=${this.settings}
@@ -677,7 +722,7 @@ export class CoffeeTrackerCard extends LitElement {
                 this.mode = null;
               }}
             >
-              <ha-icon icon="mdi:cog" aria-hidden="true"></ha-icon>
+              ${icon("settings")}
             </button>
           </header>
           ${
@@ -729,7 +774,7 @@ export class CoffeeTrackerCard extends LitElement {
                         @click=${this.buy}
                       >
                         ${icon(this.celebrating ? "check" : "coffee")}<span
-                          >${this.pending && !this.mode ? "Recording…" : this.celebrating ? "Enjoy your coffee" : "Coffee purchased"}</span
+                          >${this.pending && !this.mode ? (this.pendingAction === "buy_coffee" ? "Recording…" : "Saving…") : this.celebrating ? "Enjoy your coffee" : "Coffee purchased"}</span
                         ><span class="amount"
                           >−${this.currency(pool.price)}</span
                         >
@@ -755,7 +800,7 @@ export class CoffeeTrackerCard extends LitElement {
                       </div>
                     </section>
                   </div>
-                  ${!this.online ? html`<p class="notice" role="status">Home Assistant is disconnected. Reconnect to record a coffee.</p>` : nothing}${pool.balance < pool.price && pool.balance >= 0 ? html`<p class="notice">Time for a top-up. You can still record a coffee; the balance will go below zero.</p>` : nothing}${
+                  ${this.pending && this.pendingAction === "reset_ledger" && !this.resetOpen ? html`<p class="notice" role="status">Resetting ledger… Waiting for Home Assistant to confirm.</p>` : nothing}${!this.online ? html`<p class="notice" role="status">Home Assistant is disconnected. Reconnect to record a coffee.</p>` : nothing}${pool.balance < pool.price && pool.balance >= 0 ? html`<p class="notice">Time for a top-up. You can still record a coffee; the balance will go below zero.</p>` : nothing}${
                     this.error && !this.resetOpen
                       ? html`<div class="notice error" role="alert">
                           ${this.error}
@@ -808,7 +853,7 @@ export class CoffeeTrackerCard extends LitElement {
                           <div class="panel-heading">
                             <h2>Pool settings</h2>
                             <button
-                              class="icon-button"
+                              class="family-icon-button"
                               aria-label="Close settings"
                               @click=${this.close}
                             >

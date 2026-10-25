@@ -470,11 +470,11 @@ test("Activity starts collapsed and removes hidden controls from the tab order",
   assert.equal(q(card, '[data-action="confirm-undo"]'), null);
 });
 
-test("header uses a bounded mdi:cog icon and omits the shared-pool subtitle", async () => {
+test("header uses a bounded canonical settings icon and omits the shared-pool subtitle", async () => {
   const { card } = await fixture();
   assert.equal(
-    q(card, '[data-action="settings"] ha-icon').getAttribute("icon"),
-    "mdi:cog",
+    q(card, '[data-action="settings"] ha-icon').icon,
+    "mdi:cog-outline",
   );
   assert.equal(q(card, ".subtitle"), null);
   assert.doesNotMatch(content(card), /a shared coffee pool/i);
@@ -610,7 +610,7 @@ test("incoming Watch action requires review and a separate fresh confirmation", 
   assert.equal(mutations(pool).at(-1).data.expected_revision, 2);
 });
 
-test("pending reset prevents duplicate confirmation and Escape dismissal", async () => {
+test("pending reset prevents duplicate submission while allowing dismissal without cancellation", async () => {
   const { card, pool } = await fixture();
   await openReset(card);
   const original = pool.hass().callService;
@@ -632,7 +632,9 @@ test("pending reset prevents duplicate confirmation and Escape dismissal", async
   assert.equal(q(card, '[data-action="cancel-reset"]').disabled, true);
   q(card, "dialog").dispatchEvent(new Event("cancel", { cancelable: true }));
   await card.updateComplete;
-  assert.equal(q(card, "dialog").open, true);
+  assert.equal(q(card, "dialog"), null);
+  assert.match(content(card), /Resetting ledger… Waiting for Home Assistant/);
+  assert.equal(q(card, '[data-action="buy"]').disabled, true);
   assert.equal(q(card, "[data-balance]").textContent, "€24.50");
   resolve();
   await settle(card);
@@ -651,7 +653,9 @@ test("unconfirmed reset can only retry inside the modal with the original reques
   assert.match(q(card, "dialog").textContent, /not confirmed/);
   assert.equal(pool.history().length, 9);
   const request = mutations(pool)[0].data;
-  await click(card, "cancel-reset");
+  assert.equal(q(card, '[data-action="cancel-reset"]'), null);
+  q(card, '[aria-label="Close reset confirmation"]').click();
+  await settle(card);
   assert.equal(q(card, "dialog"), null);
   assert.equal(q(card, '[data-action="buy"]').disabled, true);
   assert.match(q(card, '[data-action="retry"]').textContent, /Review reset/);
@@ -762,4 +766,44 @@ test("preview reset retires old request IDs rather than resurrecting deleted fin
   );
   assert.equal(pool.history().length, 0);
   assert.equal(pool.state().attributes.balance_minor, 0);
+});
+
+test("every reset confirmation has the shared X, safe initial focus and focus return", async () => {
+  const { card, pool } = await fixture();
+  await openReset(card);
+  const close = q(card, '[aria-label="Close reset confirmation"]');
+  assert.equal(close.querySelector("ha-icon").icon, "mdi:close");
+  assert.equal(close.title, "Close");
+  assert.equal(close.classList.contains("family-icon-button"), true);
+  assert.equal(q(card, "dialog").classList.contains("family-dialog"), true);
+  assert.equal(
+    card.shadowRoot.activeElement,
+    q(card, '[data-action="cancel-reset"]'),
+  );
+  close.click();
+  await settle(card);
+  assert.equal(q(card, "dialog"), null);
+  assert.equal(card.shadowRoot.activeElement, q(card, '[data-action="reset"]'));
+  assert.equal(mutations(pool).length, 0);
+});
+
+test("removing the card disposes its modal and pending modal opens cannot outlive it", async () => {
+  const { card, pool } = await fixture();
+  await openReset(card);
+  const dialog = q(card, "dialog");
+  card.remove();
+  await settle(card);
+  assert.equal(dialog.open, false);
+  assert.equal(mutations(pool).length, 0);
+});
+
+test("standard coffee controls use MDI while the decorative cup remains an illustration", async () => {
+  const { card } = await fixture();
+  assert.equal(q(card, '[data-action="add"] ha-icon').icon, "mdi:plus");
+  assert.equal(
+    q(card, '[data-action="balance"] ha-icon').icon,
+    "mdi:pencil-outline",
+  );
+  assert.equal(q(card, ".cup-art").tagName.toLowerCase(), "svg");
+  assert.equal(q(card, "button svg"), null);
 });
