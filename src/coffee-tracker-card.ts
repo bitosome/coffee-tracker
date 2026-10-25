@@ -4,12 +4,13 @@ import {
   familyStyles,
   headerStyles,
   dialogStyles,
-  showFamilyDialog,
-  closeFamilyDialog,
-  disposeFamilyDialog,
-  dialogClose,
+  FamilyFlowController,
+  renderFamilyDialog,
+  componentStyles,
+  actionPill,
+  notice,
 } from "./shared/card-primitives";
-import { buildGlow } from "./shared/glow";
+import { buildGlow, glowStyles } from "./shared/glow";
 import { styles } from "./styles";
 import { icon, cupArt } from "./icons";
 import {
@@ -71,6 +72,8 @@ export class CoffeeTrackerCard extends LitElement {
     familyStyles,
     headerStyles,
     dialogStyles,
+    componentStyles,
+    glowStyles,
   ];
   hass?: HomeAssistant;
   private config?: CardConfig;
@@ -96,6 +99,51 @@ export class CoffeeTrackerCard extends LitElement {
   private resetOpen = false;
   private resetSnapshot: Pool | null = null;
   private formRevision = 0;
+  private formBaseline = { amount: "", note: "" };
+  private operationEpoch = 0;
+  private undoSnapshot?: {
+    transaction_id: string;
+    expected_revision: number;
+    label: string;
+  };
+  private flow = new FamilyFlowController<
+    "settings" | "add" | "balance" | "price" | "reset" | "undo"
+  >(this, {
+    guard: (intent) => ({
+      pending: intent === "navigate" && this.pending,
+      dirty:
+        !!this.mode &&
+        !this.pending &&
+        !this.failed &&
+        (this.amount !== this.formBaseline.amount ||
+          this.note !== this.formBaseline.note),
+      discard: () => {
+        this.amount = this.formBaseline.amount;
+        this.note = this.formBaseline.note;
+      },
+    }),
+    onChange: (route) => {
+      this.mode =
+        route === "add" || route === "balance" || route === "price"
+          ? route
+          : null;
+      this.settings = route === "settings";
+      this.resetOpen = route === "reset";
+      this.undoConfirm = route === "undo";
+      this.formError = "";
+      if (this.mode) {
+        this.amount =
+          this.mode === "balance"
+            ? decimal(this.pool?.balance || 0)
+            : this.mode === "price"
+              ? decimal(this.pool?.price || 0)
+              : "";
+        this.note = "";
+        this.formRevision = this.pool?.revision || 0;
+        this.formBaseline = { amount: this.amount, note: this.note };
+      }
+    },
+  });
   private historyGeneration = 0;
   private observed = "";
   private animationTimer?: ReturnType<typeof setTimeout>;
@@ -109,9 +157,10 @@ export class CoffeeTrackerCard extends LitElement {
     if (config.title !== undefined && typeof config.title !== "string")
       throw new Error("Title must be text.");
     if (this.config?.entity !== config.entity) {
-      disposeFamilyDialog(
-        this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
-      );
+      this.flow.forceClose(false);
+      this.operationEpoch++;
+      this.pending = false;
+      this.pendingAction = "";
       this.resetOpen = false;
       this.resetSnapshot = null;
       this.activityExpanded = false;
@@ -179,10 +228,10 @@ export class CoffeeTrackerCard extends LitElement {
   }
   disconnectedCallback() {
     super.disconnectedCallback();
-    disposeFamilyDialog(
-      this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
-    );
     this.resetOpen = false;
+    this.mode = null;
+    this.settings = false;
+    this.undoConfirm = false;
     this.historyGeneration++;
     clearTimeout(this.animationTimer);
     this.celebrating = false;
@@ -231,31 +280,15 @@ export class CoffeeTrackerCard extends LitElement {
       return String(err.message);
     return String(err || "Could not reach Home Assistant.");
   }
-  private open(mode: EditMode) {
-    if (this.pending) return;
-    this.settings = false;
-    this.undoConfirm = false;
-    this.mode = this.mode === mode ? null : mode;
-    this.amount =
-      mode === "balance"
-        ? decimal(this.pool?.balance || 0)
-        : mode === "price"
-          ? decimal(this.pool?.price || 0)
-          : "";
-    this.note = "";
-    this.formError = "";
-    this.formRevision = this.pool?.revision || 0;
-    void this.updateComplete.then(() =>
-      this.renderRoot.querySelector<HTMLInputElement>("[data-amount]")?.focus(),
-    );
+  private open(mode: EditMode, opener?: HTMLElement) {
+    if (this.pending || !mode) return;
+    if (this.flow.current === "settings") this.flow.push(mode);
+    else this.flow.open(mode, opener);
   }
   private close() {
-    if (this.pending) return;
-    this.mode = null;
-    this.settings = false;
-    this.formError = "";
+    this.flow.close();
   }
-  private async openReset() {
+  private openReset() {
     if (
       this.pending ||
       !this.online ||
@@ -267,40 +300,16 @@ export class CoffeeTrackerCard extends LitElement {
       this.resetSnapshot = { ...this.pool! };
       this.error = "";
     }
-    const entity = this.config?.entity;
-    this.resetOpen = true;
-    this.undoConfirm = false;
-    await this.updateComplete;
-    if (!this.isConnected || entity !== this.config?.entity || !this.resetOpen)
-      return;
-    const dialog = this.renderRoot.querySelector<HTMLDialogElement>("dialog");
-    if (dialog && !dialog.open)
-      showFamilyDialog(dialog, {
-        opener:
-          this.renderRoot.querySelector<HTMLElement>('[data-action="reset"]') ??
+    if (this.flow.current === "settings") this.flow.push("reset");
+    else
+      this.flow.open(
+        "reset",
+        this.renderRoot.querySelector<HTMLElement>('[data-action="retry"]') ??
           undefined,
-        initialFocus:
-          dialog.querySelector<HTMLElement>('[data-action="cancel-reset"]') ??
-          dialog.querySelector<HTMLElement>(".family-icon-button"),
-        onBackdrop: () => this.closeReset(),
-      });
+      );
   }
   private closeReset() {
-    // Dismissal never cancels a dispatched ledger mutation or enables a duplicate.
-    closeFamilyDialog(
-      this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
-    );
-    this.resetOpen = false;
-    void this.updateComplete.then(() => {
-      const resetButton = this.renderRoot.querySelector<HTMLButtonElement>(
-        '[data-action="reset"]',
-      );
-      if (resetButton && !resetButton.disabled) resetButton.focus();
-      else
-        this.renderRoot
-          .querySelector<HTMLButtonElement>('[data-action="settings"]')
-          ?.focus();
-    });
+    this.flow.back();
   }
   private confirmReset() {
     if (!this.resetOpen || !this.resetSnapshot || !this.supportsReset) return;
@@ -322,98 +331,89 @@ export class CoffeeTrackerCard extends LitElement {
       );
     }
   }
-  private resetDialog(title: string) {
-    if (!this.resetOpen || !this.resetSnapshot) return nothing;
+  private resetContent(title: string) {
+    if (!this.resetSnapshot) return nothing;
     const uncertain = this.failed?.name === "reset_ledger";
     const stale =
       !uncertain && this.pool?.revision !== this.resetSnapshot.revision;
-    return html`<dialog
-      class="reset-dialog family-dialog"
-      aria-labelledby="reset-title"
-      aria-describedby="reset-description"
-      aria-modal="true"
-      @cancel=${(event: Event) => {
-        event.preventDefault();
-        this.closeReset();
-      }}
-    >
-      <header class="family-dialog-header">
-        <h2 id="reset-title">Reset ledger?</h2>
-        ${dialogClose("Close reset confirmation", () => this.closeReset())}
-      </header>
-      <div class="family-dialog-body">
-        <p id="reset-description">
-          Delete all activity in <strong>${title}</strong> and reset its balance
-          and coffee count to zero. This affects everyone using this pool and
-          cannot be undone.
-        </p>
-        <div class="reset-summary">
-          <span
-            >Current balance<strong
-              >${money(this.resetSnapshot.balance, this.resetSnapshot.currency, this.locale)}</strong
-            ></span
-          >
-          <span
-            >Coffees recorded<strong>${this.resetSnapshot.count}</strong></span
-          >
-        </div>
-        <p class="hint">
-          Cup price
-          (${money(this.resetSnapshot.price, this.resetSnapshot.currency, this.locale)})
-          and currency (${this.resetSnapshot.currency}) stay the same.
-        </p>
-        ${
-          this.error
-            ? html`<div class="notice error" role="alert">
-                ${this.error}
-                ${uncertain ? html`<p class="hint">The reset was not confirmed. Retry the same request safely, or close and check the balance and activity. A retry will not delete any activity recorded after a completed reset.</p>` : nothing}
-              </div>`
-            : nothing
-        }
-        ${
-          stale
-            ? html`<p class="form-error" role="status">
-                  The pool changed since you opened this confirmation. Review
-                  the latest balance before resetting.
-                </p>
-                <button
-                  class="text-button"
-                  data-action="review-reset"
-                  ?disabled=${this.pending || !this.online}
-                  @click=${() => {
-                    this.resetSnapshot = { ...this.pool! };
-                    this.error = "";
-                  }}
-                >
-                  Review latest balance
-                </button>`
-            : nothing
-        }
-        ${this.pending ? html`<p class="hint" role="status">Resetting ledger. Closing this view will not cancel the request.</p>` : nothing}
-      </div>
-      <footer class="reset-actions family-dialog-footer">
-        ${
-          !uncertain
-            ? html`<button
-                class="reset-cancel family-action"
-                data-action="cancel-reset"
-                ?disabled=${this.pending}
-                @click=${this.closeReset}
-              >
-                Cancel
-              </button>`
-            : nothing
-        }
-        <button
-          class="reset-confirm family-action"
-          data-action="confirm-reset"
-          ?disabled=${this.pending || !this.online || !this.supportsReset || stale}
-          @click=${this.confirmReset}
+    return html`
+      <p id="reset-description">
+        Delete all activity in <strong>${title}</strong> and reset its balance
+        and coffee count to zero. This affects everyone using this pool and
+        cannot be undone.
+      </p>
+      <div class="reset-summary">
+        <span
+          >Current balance<strong
+            >${money(this.resetSnapshot.balance, this.resetSnapshot.currency, this.locale)}</strong
+          ></span
         >
-          ${this.pending ? "Resetting…" : uncertain ? "Retry reset" : "Reset ledger"}
-        </button>
-      </footer>
-    </dialog>`;
+        <span
+          >Coffees recorded<strong>${this.resetSnapshot.count}</strong></span
+        >
+      </div>
+      <p class="hint">
+        Cup price
+        (${money(this.resetSnapshot.price, this.resetSnapshot.currency, this.locale)})
+        and currency (${this.resetSnapshot.currency}) stay the same.
+      </p>
+      ${
+        this.error
+          ? html`<div class="notice error" role="alert">
+              ${this.error}
+              ${uncertain ? html`<p class="hint">The reset was not confirmed. Retry the same request safely, or close and check the balance and activity. A retry will not delete any activity recorded after a completed reset.</p>` : nothing}
+            </div>`
+          : nothing
+      }
+      ${
+        stale
+          ? html`<p class="form-error" role="status">
+                The pool changed since you opened this confirmation. Review the
+                latest balance before resetting.
+              </p>
+              <button
+                class="text-button"
+                data-action="review-reset"
+                ?disabled=${this.pending || !this.online}
+                @click=${() => {
+                  this.resetSnapshot = { ...this.pool! };
+                  this.error = "";
+                }}
+              >
+                Review latest balance
+              </button>`
+          : nothing
+      }
+      ${this.pending ? html`<p class="hint" role="status">Resetting ledger. Closing this view will not cancel the request.</p>` : nothing}
+    `;
+  }
+  private resetFooter() {
+    const uncertain = this.failed?.name === "reset_ledger";
+    const stale =
+      !uncertain && this.pool?.revision !== this.resetSnapshot?.revision;
+    return html`
+      ${
+        !uncertain
+          ? html`<button
+              class="reset-cancel family-action"
+              data-family-initial-focus
+              data-action="cancel-reset"
+              ?disabled=${this.pending}
+              @click=${this.closeReset}
+            >
+              Cancel
+            </button>`
+          : nothing
+      }
+      <button
+        class="reset-confirm family-action destructive"
+        data-action="confirm-reset"
+        ?disabled=${this.pending || !this.online || !this.supportsReset || stale}
+        @click=${this.confirmReset}
+      >
+        ${this.pending ? "Resetting…" : uncertain ? "Retry reset" : "Reset ledger"}
+      </button>
+    `;
   }
   private async mutate(
     name: string,
@@ -436,6 +436,8 @@ export class CoffeeTrackerCard extends LitElement {
       price: this.pool!.price,
       entity: this.config.entity,
     };
+    const operationEpoch = this.operationEpoch;
+    const flowGeneration = this.flow.generation;
     this.pending = true;
     this.pendingAction = request.name;
     this.error = "";
@@ -446,7 +448,11 @@ export class CoffeeTrackerCard extends LitElement {
         request.name,
         request.data,
       );
-      if (this.config.entity !== request.entity) return;
+      if (
+        operationEpoch !== this.operationEpoch ||
+        this.config.entity !== request.entity
+      )
+        return;
       if (
         !receipt ||
         !Number.isSafeInteger(receipt.revision) ||
@@ -454,32 +460,22 @@ export class CoffeeTrackerCard extends LitElement {
       )
         throw new Error("Home Assistant did not confirm this action.");
       this.failed = null;
-      this.mode = null;
-      this.settings = false;
-      this.undoConfirm = false;
+      if (this.flow.isCurrent(flowGeneration)) this.flow.forceClose();
       this.feedback = request.label;
       if (request.name === "reset_ledger") {
-        closeFamilyDialog(
-          this.renderRoot?.querySelector<HTMLDialogElement>("dialog"),
-        );
-        this.resetOpen = false;
-        this.resetSnapshot = null;
+        if (!this.resetOpen) this.resetSnapshot = null;
         this.history = [];
         this.hasMore = false;
         this.nextBefore = null;
         this.activityExpanded = false;
         clearTimeout(this.animationTimer);
         this.celebrating = false;
-        void this.updateComplete.then(() =>
-          this.renderRoot
-            .querySelector<HTMLButtonElement>('[data-action="settings"]')
-            ?.focus(),
-        );
       }
       if (request.name === "buy_coffee") {
         this.spent = receipt.cup_price_minor;
         this.celebrating = false;
         await this.updateComplete;
+        if (operationEpoch !== this.operationEpoch || !this.isConnected) return;
         this.celebrating = true;
         clearTimeout(this.animationTimer);
         this.animationTimer = setTimeout(() => {
@@ -488,14 +484,19 @@ export class CoffeeTrackerCard extends LitElement {
       }
       void this.loadHistory();
     } catch (err) {
-      if (this.config.entity === request.entity) {
+      if (
+        operationEpoch === this.operationEpoch &&
+        this.config.entity === request.entity
+      ) {
         this.failed = isRejectedAction(err) ? null : request;
         this.error = this.errorText(err);
         void this.loadHistory();
       }
     } finally {
-      this.pending = false;
-      this.pendingAction = "";
+      if (operationEpoch === this.operationEpoch) {
+        this.pending = false;
+        this.pendingAction = "";
+      }
     }
   }
   private buy() {
@@ -589,18 +590,7 @@ export class CoffeeTrackerCard extends LitElement {
           : "Price per cup";
     const stale =
       this.mode !== "add" && this.pool?.revision !== this.formRevision;
-    return html`<section class="surface panel" aria-label=${title}>
-      <div class="panel-heading">
-        <h2>${title}</h2>
-        <button
-          class="family-icon-button"
-          aria-label="Close settings"
-          ?disabled=${this.pending}
-          @click=${this.close}
-        >
-          ${icon("close")}
-        </button>
-      </div>
+    return html`<section class="edit-content" aria-label=${title}>
       <p class="hint">
         ${this.mode === "add" ? "Record a contribution to the shared coffee pool." : this.mode === "balance" ? "Set the correct total. The adjustment stays in the history." : "Applies to everyone. Previous coffees keep their original price."}
       </p>
@@ -609,6 +599,7 @@ export class CoffeeTrackerCard extends LitElement {
           >${this.mode === "balance" ? "New balance" : "Amount"}
           (${this.pool?.currency})<input
             data-amount
+            data-family-initial-focus
             inputmode="decimal"
             autocomplete="off"
             .value=${this.amount}
@@ -626,17 +617,14 @@ export class CoffeeTrackerCard extends LitElement {
         >${
           this.mode === "add"
             ? html`<div class="presets">
-                ${[5, 10, 20].map(
-                  (amount) =>
-                    html`<button
-                      type="button"
-                      ?disabled=${this.pending || !!this.failed}
-                      @click=${() => {
-                        this.amount = amount.toFixed(2);
-                      }}
-                    >
-                      ${this.currency(amount * 100)}
-                    </button>`,
+                ${[5, 10, 20].map((amount) =>
+                  actionPill({
+                    label: this.currency(amount * 100),
+                    disabled: this.pending || !!this.failed,
+                    onClick: () => {
+                      this.amount = amount.toFixed(2);
+                    },
+                  }),
                 )}
               </div>`
             : nothing
@@ -669,6 +657,10 @@ export class CoffeeTrackerCard extends LitElement {
                         ? this.pool!.balance
                         : this.pool!.price,
                     );
+                    this.formBaseline = {
+                      amount: this.amount,
+                      note: this.note,
+                    };
                   }}
                 >
                   Use latest value
@@ -683,6 +675,144 @@ export class CoffeeTrackerCard extends LitElement {
         </button>
       </form>
     </section>`;
+  }
+  private settingsContent() {
+    if (!this.pool) return nothing;
+    return html`<div class="settings-options">
+        <button
+          class="settings-option"
+          ?disabled=${this.pending || !!this.failed || !this.online}
+          @click=${() => this.open("price")}
+        >
+          <span
+            >Price per cup<small
+              >${this.currency(this.pool!.price)} · shared by everyone</small
+            ></span
+          >${icon("arrow")}</button
+        ><button
+          class="settings-option"
+          ?disabled=${this.pending || !!this.failed || !this.online}
+          @click=${() => this.open("balance")}
+        >
+          <span
+            >Adjust balance<small
+              >Correct the total with an audit trail</small
+            ></span
+          >${icon("arrow")}
+        </button>
+        <button
+          class="settings-option danger-option"
+          data-action="reset"
+          ?disabled=${this.pending || !!this.failed || !this.online || !this.supportsReset}
+          @click=${this.openReset}
+        >
+          <span
+            >Reset ledger<small
+              >${this.supportsReset ? "Delete activity and start the balance at zero" : "Restart Home Assistant after updating to enable reset"}</small
+            ></span
+          >
+          <ha-icon icon="mdi:delete-outline" aria-hidden="true"></ha-icon>
+        </button>
+      </div>
+      <p class="hint">
+        Your balance and history are saved in Home Assistant, including after
+        restarts.
+      </p> `;
+  }
+  private renderFlow(title: string) {
+    const route = this.flow.current;
+    const feedback = this.error
+      ? notice({
+          message: this.error,
+          tone: "error",
+          action: this.failed
+            ? {
+                label:
+                  this.failed.name === "reset_ledger"
+                    ? "Review reset"
+                    : "Retry",
+                onClick: () => {
+                  const failed = this.failed;
+                  if (failed?.name === "reset_ledger") this.openReset();
+                  else if (failed)
+                    void this.mutate(
+                      failed.name,
+                      failed.data,
+                      failed.label,
+                      failed,
+                    );
+                },
+              }
+            : undefined,
+        })
+      : this.pending
+        ? notice({
+            message:
+              "Waiting for Home Assistant to confirm. Closing this view will not cancel the request.",
+          })
+        : nothing;
+    const formTitle =
+      route === "add"
+        ? "Add money"
+        : route === "balance"
+          ? "Adjust balance"
+          : "Price per cup";
+    return renderFamilyDialog(this.flow, {
+      title:
+        route === "settings"
+          ? "Coffee pool settings"
+          : route === "reset"
+            ? "Reset ledger?"
+            : route === "undo"
+              ? "Undo last action?"
+              : formTitle,
+      className: `${route}-dialog`,
+      ariaDescribedBy: route === "reset" ? "reset-description" : undefined,
+      content:
+        route === "reset"
+          ? this.resetContent(title)
+          : html`${feedback}${
+              route === "settings"
+                ? this.settingsContent()
+                : route === "undo"
+                  ? html`<p>
+                      Undo “${this.undoSnapshot?.label}”? A reversal will be
+                      added to the history.
+                    </p>`
+                  : this.editPanel()
+            }`,
+      footer:
+        route === "reset"
+          ? this.resetFooter()
+          : route === "undo"
+            ? html` <button
+                  class="family-action"
+                  data-family-initial-focus
+                  @click=${() => this.flow.back()}
+                >
+                  Keep it
+                </button>
+                <button
+                  class="family-action destructive"
+                  data-action="confirm-undo"
+                  ?disabled=${this.pending || !!this.failed || !this.online || !this.undoSnapshot}
+                  @click=${() => {
+                    const value = this.undoSnapshot;
+                    if (value)
+                      void this.mutate(
+                        "undo",
+                        {
+                          transaction_id: value.transaction_id,
+                          expected_revision: value.expected_revision,
+                        },
+                        "Last action undone.",
+                      );
+                  }}
+                >
+                  Undo action
+                </button>`
+            : undefined,
+    });
   }
   protected render() {
     if (!this.config) return nothing;
@@ -715,12 +845,10 @@ export class CoffeeTrackerCard extends LitElement {
               class="family-icon-button"
               data-action="settings"
               aria-label="Coffee pool settings"
-              aria-expanded=${this.settings}
-              ?disabled=${!this.online || this.pending}
-              @click=${() => {
-                this.settings = !this.settings;
-                this.mode = null;
-              }}
+              aria-expanded=${this.flow.active}
+              ?disabled=${!this.online}
+              aria-haspopup="dialog"
+              @click=${(event: Event) => this.flow.open("settings", event.currentTarget as HTMLElement)}
             >
               ${icon("settings")}
             </button>
@@ -745,7 +873,7 @@ export class CoffeeTrackerCard extends LitElement {
                           data-action="price"
                           aria-label=${`Change price per cup, currently ${this.currency(pool.price)}`}
                           ?disabled=${blocked}
-                          @click=${() => this.open("price")}
+                          @click=${(event: Event) => this.open("price", event.currentTarget as HTMLElement)}
                         >
                           ${this.currency(pool.price)} / cup
                         </button>
@@ -785,7 +913,7 @@ export class CoffeeTrackerCard extends LitElement {
                           data-action="add"
                           aria-expanded=${this.mode === "add"}
                           ?disabled=${blocked}
-                          @click=${() => this.open("add")}
+                          @click=${(event: Event) => this.open("add", event.currentTarget as HTMLElement)}
                         >
                           ${icon("plus")} Add money</button
                         ><button
@@ -793,7 +921,7 @@ export class CoffeeTrackerCard extends LitElement {
                           data-action="balance"
                           aria-expanded=${this.mode === "balance"}
                           ?disabled=${blocked}
-                          @click=${() => this.open("balance")}
+                          @click=${(event: Event) => this.open("balance", event.currentTarget as HTMLElement)}
                         >
                           ${icon("adjust")} Adjust balance
                         </button>
@@ -844,67 +972,7 @@ export class CoffeeTrackerCard extends LitElement {
                           </div>
                         </div>`
                       : nothing
-                  }${this.feedback ? html`<p class="feedback success" role="status">${this.feedback}</p>` : nothing}${
-                    this.settings
-                      ? html`<section
-                          class="surface panel"
-                          aria-label="Settings"
-                        >
-                          <div class="panel-heading">
-                            <h2>Pool settings</h2>
-                            <button
-                              class="family-icon-button"
-                              aria-label="Close settings"
-                              @click=${this.close}
-                            >
-                              ${icon("close")}
-                            </button>
-                          </div>
-                          <div class="settings-options">
-                            <button
-                              class="settings-option"
-                              @click=${() => this.open("price")}
-                            >
-                              <span
-                                >Price per cup<small
-                                  >${this.currency(pool.price)} · shared by
-                                  everyone</small
-                                ></span
-                              >${icon("arrow")}</button
-                            ><button
-                              class="settings-option"
-                              @click=${() => this.open("balance")}
-                            >
-                              <span
-                                >Adjust balance<small
-                                  >Correct the total with an audit trail</small
-                                ></span
-                              >${icon("arrow")}
-                            </button>
-                            <button
-                              class="settings-option danger-option"
-                              data-action="reset"
-                              ?disabled=${blocked || !this.supportsReset}
-                              @click=${this.openReset}
-                            >
-                              <span
-                                >Reset ledger<small
-                                  >${this.supportsReset ? "Delete activity and start the balance at zero" : "Restart Home Assistant after updating to enable reset"}</small
-                                ></span
-                              >
-                              <ha-icon
-                                icon="mdi:delete-outline"
-                                aria-hidden="true"
-                              ></ha-icon>
-                            </button>
-                          </div>
-                          <p class="hint">
-                            Your balance and history are saved in Home
-                            Assistant, including after restarts.
-                          </p>
-                        </section>`
-                      : nothing
-                  }${this.editPanel()}
+                  }${this.feedback ? notice({ message: this.feedback, tone: "success" }) : nothing}
                   <h2 class="history-heading">
                     <button
                       class="history-head"
@@ -945,51 +1013,32 @@ export class CoffeeTrackerCard extends LitElement {
                                       class="text-button"
                                       data-action="undo"
                                       ?disabled=${blocked || this.historyLoading}
-                                      @click=${() => {
-                                        this.undoConfirm = !this.undoConfirm;
+                                      @click=${(event: Event) => {
+                                        this.undoSnapshot = {
+                                          transaction_id: latest.id,
+                                          expected_revision: pool.revision,
+                                          label:
+                                            actionLabels[latest.kind] ||
+                                            "last action",
+                                        };
+                                        this.flow.open(
+                                          "undo",
+                                          event.currentTarget as HTMLElement,
+                                        );
                                       }}
                                     >
                                       ${icon("undo")} Undo last action
                                     </button>`
                                   : html`<span></span>`
                               }${this.hasMore ? html`<button class="text-button" data-action="more" ?disabled=${this.historyLoading || !this.online} @click=${() => this.loadHistory(true)}>${this.historyLoading ? "Loading…" : "Older activity"} ${icon("arrow")}</button>` : nothing}
-                            </div>
-                            ${
-                              this.activityExpanded &&
-                              this.undoConfirm &&
-                              latest
-                                ? html`<div class="surface undo-confirm">
-                                    <p class="hint">
-                                      Undo
-                                      “${actionLabels[latest.kind] || "last action"}”?
-                                      A reversal will be added to the history.
-                                    </p>
-                                    <button
-                                      class="text-button"
-                                      data-action="confirm-undo"
-                                      ?disabled=${blocked}
-                                      @click=${() => this.mutate("undo", { transaction_id: latest.id, expected_revision: pool.revision }, "Last action undone.")}
-                                    >
-                                      Undo action</button
-                                    ><button
-                                      class="text-button"
-                                      ?disabled=${this.pending}
-                                      @click=${() => {
-                                        this.undoConfirm = false;
-                                      }}
-                                    >
-                                      Keep it
-                                    </button>
-                                  </div>`
-                                : nothing
-                            }`
+                            </div> `
                         : nothing
                     }
                   </div>`
           }
         </div>
       </div>
-      ${this.resetDialog(title)}</ha-card
+      ${this.renderFlow(title)}</ha-card
     >`;
   }
 }

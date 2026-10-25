@@ -87,20 +87,6 @@ export const styles = css`
     border-radius: var(--tile-border-radius);
     box-shadow: var(--tile-shadow-default);
   }
-  .glow-under {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: var(--tile-border-radius);
-  }
-  .glow-overlay {
-    position: absolute;
-    inset: -10px -14px -18px;
-    border-radius: inherit;
-    pointer-events: none;
-    mask-image: linear-gradient(180deg, transparent, #0004 18px, #000 44px);
-  }
   .hero {
     padding: 23px 22px 20px;
     overflow: hidden;
@@ -299,24 +285,11 @@ export const styles = css`
   .feedback.success {
     color: var(--status-success-color);
   }
-  .panel {
-    padding: 18px;
-  }
-  .panel-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
   h2 {
     font-size: 15px;
     font-weight: 650;
     letter-spacing: -0.015em;
     margin: 0;
-  }
-  .panel .icon-button {
-    margin: -10px -10px -10px 0;
   }
   .field {
     display: grid;
@@ -572,7 +545,7 @@ export const styles = css`
   .danger-option {
     color: var(--error-color, var(--status-alert-color));
   }
-  .reset-dialog .family-dialog-body > p {
+  .reset-dialog .family-dialog-body p {
     font-size: 13px;
     line-height: 1.65;
     margin: 0 0 16px;
@@ -596,30 +569,6 @@ export const styles = css`
     margin-top: 6px;
     font-size: 19px;
     color: var(--primary-text-color, #26352f);
-  }
-  .reset-actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 0;
-  }
-  .reset-actions button {
-    flex: 1;
-    min-height: 46px;
-    padding: 10px 14px;
-    border-radius: var(--chip-border-radius);
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .reset-cancel {
-    background: var(--coffee-tile);
-  }
-  .reset-actions .reset-confirm {
-    background: color-mix(
-      in srgb,
-      var(--error-color, var(--status-alert-color)) 85%,
-      #000
-    );
-    color: var(--status-icon-on-color, #fff);
   }
   @keyframes cup-cheers {
     0%,

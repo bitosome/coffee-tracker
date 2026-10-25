@@ -37,7 +37,7 @@ For YAML-managed Lovelace resources:
 ```yaml
 lovelace:
   resources:
-    - url: /coffee_tracker/coffee-tracker-card.js?v=0.2.1
+    - url: /coffee_tracker/coffee-tracker-card.js?v=0.3.0
       type: module
 ```
 
@@ -94,13 +94,10 @@ See [architecture and service API](docs/architecture.md) for details and [develo
 
 ## License and design
 
-MIT. Shared design tokens and glow utilities come from [Space Hub Card](https://github.com/bitosome/space-hub-card); their source revisions are recorded in `src/shared/PROVENANCE.md`.
+MIT. Shared design components derive from [Space Hub Card](https://github.com/bitosome/space-hub-card) through `@bitosome/ha-card-ui`; see `src/shared/PROVENANCE.md`.
 
 ## Shared design
 
-System controls use the Space Hub card-family primitives vendored in `src/shared/`.
-`DESIGN_PROVENANCE.json` pins their canonical source and hashes; update them using
-Space Hub's `scripts/sync-card-design.mjs`, never by hand. Standard controls use Home
-Assistant MDI icons; the cup remains a decorative illustration. The reset dialog has
-a fixed X header and a scrollable body. Dismissing an in-flight reset does not cancel
-it: the card retains its pending status, duplicate guard and idempotent retry receipt.
+The build bundles [`@bitosome/ha-card-ui`](https://github.com/bitosome/ha-card-ui), the versioned Space Hub design and behavior library. Its tokens, under-tile activation glows, MDI controls and shared native dialog controller are included in this card's JavaScript. Home Assistant does not need a separate library resource or another card installed. The release URL and integrity are pinned by `package-lock.json`; see [provenance](src/shared/PROVENANCE.md).
+
+Settings, Add money, Adjust balance, Price per cup, Reset ledger and Undo use one modal flow. Back returns to a parent screen; X closes the whole flow. Changed amount/reason drafts require explicit discard. Activity stays collapsed on the main card. A dispatched ledger write keeps its duplicate guard and idempotent retry identity after dismissal; completion cannot close a newer flow. Errors and pending state remain available while that request finishes.

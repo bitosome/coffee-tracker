@@ -16,6 +16,6 @@ The preview uses invented people and transactions. It has no connection to Home 
 
 The integration lives under `custom_components/coffee_tracker`. The TypeScript frontend builds into that directory's `www/coffee-tracker-card.js`; this generated artifact is committed and included in HACS downloads. Update the version in `package.json`, `package-lock.json`, and `manifest.json` together. Rebuild, run tests, and inspect both themes at mobile widths before release.
 
-Shared design files retain provenance. Synchronize from the canonical Space Hub source instead of changing the vendored tokens for this card.
+Shared design and modal behavior are bundled from `@bitosome/ha-card-ui`. Update the pinned package release and run all checks instead of changing the compatibility exports or creating local token/dialog copies.
 
 CI checks the frontend, backend, package, and HACS/HA metadata. Release tags must match the package and manifest version. A release includes the integration zip and the card module; the supported HACS installation is Integration, using the complete repository layout.

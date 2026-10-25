@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-10-25
+
+- Bundle `@bitosome/ha-card-ui` for canonical Space Hub design, glows and reusable modal/action/feedback components.
+- Move contributions, balance and price editing, Settings, ledger reset and Undo into one shared modal flow. Back returns to the parent; X closes the whole flow.
+- Guard changed form values on Back, X, Escape and backdrop with Keep editing / Discard changes, preserving focus and drafts during telemetry updates.
+- Keep pending ledger writes and idempotent retries independent of modal dismissal. Late acknowledgements cannot close a newer flow or alter another pool configuration.
+- Keep Activity collapsed on the dashboard and retain shared persisted integer-cent accounting and revision validation.
+
 ## 0.2.1 — 2026-10-25
 
 - Adopt the shared Space Hub header, icon buttons and native dialog shell with safe-area geometry and focus restoration.

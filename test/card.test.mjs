@@ -255,7 +255,7 @@ test("Undo is explicit, appends a reversal, and cannot repeatedly undo an undo",
   await click(card, "activity");
   await click(card, "undo");
   assert.equal(mutations(pool).length, 0);
-  assert.match(content(card), /reversal will be added/);
+  assert.match(content(card), /reversal will be\s+added/);
   await click(card, "confirm-undo");
   assert.equal(mutations(pool)[0].name, "undo");
   assert.equal(q(card, "[data-balance]").textContent, "€26.00");
@@ -459,6 +459,8 @@ test("Activity starts collapsed and removes hidden controls from the tab order",
   assert.equal(card.shadowRoot.querySelectorAll(".entry").length, 5);
   assert.equal(card.getCardSize(), 7);
   await click(card, "undo");
+  q(card, "dialog [title=Close]").click();
+  await settle(card);
   await click(card, "activity");
   assert.equal(q(card, '[data-action="confirm-undo"]'), null);
   assert.equal(q(card, "#coffee-activity").children.length, 0);
@@ -499,8 +501,7 @@ test("reset is only available in Settings and opens a descriptive modal without 
   await openReset(card);
   const dialog = q(card, "dialog");
   assert.equal(dialog.open, true);
-  assert.equal(dialog.getAttribute("aria-modal"), "true");
-  assert.equal(dialog.getAttribute("aria-labelledby"), "reset-title");
+  assert.equal(dialog.getAttribute("aria-label"), "Reset ledger?");
   assert.equal(dialog.getAttribute("aria-describedby"), "reset-description");
   assert.match(dialog.textContent, /Delete all activity/);
   assert.match(dialog.textContent, /coffee count to zero/);
@@ -521,8 +522,9 @@ test("Cancel and Escape close the reset modal without changing the ledger", asyn
   const { card, pool } = await fixture();
   await openReset(card);
   await click(card, "cancel-reset");
-  assert.equal(q(card, "dialog"), null);
-  assert.equal(card.shadowRoot.activeElement, q(card, '[data-action="reset"]'));
+  assert.equal(q(card, ".reset-dialog"), null);
+  assert.ok(q(card, ".settings-dialog"));
+  assert.equal(card.shadowRoot.activeElement, q(card, "[data-family-heading]"));
   await click(card, "reset");
   const escape = new Event("cancel", { cancelable: true });
   q(card, "dialog").dispatchEvent(escape);
@@ -654,7 +656,7 @@ test("unconfirmed reset can only retry inside the modal with the original reques
   assert.equal(pool.history().length, 9);
   const request = mutations(pool)[0].data;
   assert.equal(q(card, '[data-action="cancel-reset"]'), null);
-  q(card, '[aria-label="Close reset confirmation"]').click();
+  q(card, 'dialog [title="Close"]').click();
   await settle(card);
   assert.equal(q(card, "dialog"), null);
   assert.equal(q(card, '[data-action="buy"]').disabled, true);
@@ -728,7 +730,8 @@ test("old integration versions explain the required update without sending a mis
   assert.equal(q(card, '[data-action="reset"]').disabled, true);
   assert.match(content(card), /Restart Home Assistant after updating/);
   await click(card, "reset");
-  assert.equal(q(card, "dialog"), null);
+  assert.equal(q(card, ".reset-dialog"), null);
+  assert.ok(q(card, ".settings-dialog"));
   assert.equal(mutations(pool).length, 0);
   assert.equal(q(card, '[data-action="buy"]').disabled, false);
 });
@@ -742,7 +745,8 @@ test("reset cannot be confirmed after transport disconnects", async () => {
   await click(card, "confirm-reset");
   assert.equal(mutations(pool).length, 0);
   await click(card, "cancel-reset");
-  assert.equal(q(card, "dialog"), null);
+  assert.equal(q(card, ".reset-dialog"), null);
+  assert.ok(q(card, ".settings-dialog"));
 });
 
 test("preview reset retires old request IDs rather than resurrecting deleted financial actions", async () => {
@@ -771,7 +775,7 @@ test("preview reset retires old request IDs rather than resurrecting deleted fin
 test("every reset confirmation has the shared X, safe initial focus and focus return", async () => {
   const { card, pool } = await fixture();
   await openReset(card);
-  const close = q(card, '[aria-label="Close reset confirmation"]');
+  const close = q(card, 'dialog [title="Close"]');
   assert.equal(close.querySelector("ha-icon").icon, "mdi:close");
   assert.equal(close.title, "Close");
   assert.equal(close.classList.contains("family-icon-button"), true);
@@ -783,7 +787,10 @@ test("every reset confirmation has the shared X, safe initial focus and focus re
   close.click();
   await settle(card);
   assert.equal(q(card, "dialog"), null);
-  assert.equal(card.shadowRoot.activeElement, q(card, '[data-action="reset"]'));
+  assert.equal(
+    card.shadowRoot.activeElement,
+    q(card, '[data-action="settings"]'),
+  );
   assert.equal(mutations(pool).length, 0);
 });
 
@@ -806,4 +813,165 @@ test("standard coffee controls use MDI while the decorative cup remains an illus
   );
   assert.equal(q(card, ".cup-art").tagName.toLowerCase(), "svg");
   assert.equal(q(card, "button svg"), null);
+});
+
+const flowButton = (card, label) =>
+  [...card.shadowRoot.querySelectorAll("dialog button")].find(
+    (button) => button.textContent.trim() === label,
+  );
+const closeFlow = (card) => q(card, 'dialog [title="Close"]').click();
+
+test("Settings children use one modal with Back; X guards a changed draft and keeps the dashboard fixed", async () => {
+  const { card, pool } = await fixture();
+  const overview = q(card, ".root");
+  const before = overview.textContent;
+  await click(card, "settings");
+  const dialog = q(card, "dialog");
+  q(card, ".settings-option").click();
+  await settle(card);
+  assert.equal(q(card, "dialog"), dialog);
+  assert.ok(q(card, ".price-dialog"));
+  assert.equal(
+    q(card, 'dialog [title="Back"]').getAttribute("aria-label"),
+    "Back",
+  );
+  assert.equal(card.shadowRoot.activeElement, q(card, "[data-amount]"));
+  await input(card, "2.75");
+  closeFlow(card);
+  await settle(card);
+  assert.match(dialog.textContent, /Discard unsaved changes/);
+  assert.equal(card.shadowRoot.activeElement, q(card, "[data-family-keep]"));
+  q(card, "[data-family-keep]").click();
+  await settle(card);
+  assert.equal(q(card, "[data-amount]").value, "2.75");
+  q(card, 'dialog [title="Back"]').click();
+  await settle(card);
+  flowButton(card, "Discard changes").click();
+  await settle(card);
+  assert.ok(q(card, ".settings-dialog"));
+  assert.equal(q(card, 'dialog [title="Back"]'), null);
+  assert.equal(overview.textContent, before);
+  closeFlow(card);
+  await settle(card);
+  assert.equal(q(card, "dialog"), null);
+  assert.equal(
+    card.shadowRoot.activeElement,
+    q(card, '[data-action="settings"]'),
+  );
+  assert.equal(mutations(pool).length, 0);
+});
+
+test("Escape and backdrop use the same draft guard; telemetry preserves editing value and focus", async () => {
+  const { card, pool } = await fixture();
+  await click(card, "add");
+  await input(card, "12.50");
+  const dialog = q(card, "dialog"),
+    field = q(card, "[data-amount]");
+  field.focus();
+  await pool.externalCoffee();
+  await settle(card);
+  assert.equal(q(card, "[data-amount]"), field);
+  assert.equal(field.value, "12.50");
+  assert.equal(card.shadowRoot.activeElement, field);
+  dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+  await settle(card);
+  assert.ok(q(card, "[data-family-keep]"));
+  dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+  await settle(card);
+  assert.equal(q(card, "[data-family-keep]"), null);
+  assert.equal(card.shadowRoot.activeElement, field);
+  dialog.getBoundingClientRect = () => ({
+    left: 10,
+    right: 300,
+    top: 10,
+    bottom: 400,
+  });
+  for (const type of ["pointerdown", "pointerup"])
+    dialog.dispatchEvent(
+      new browser.PointerEvent(type, { clientX: 1, clientY: 1, bubbles: true }),
+    );
+  await settle(card);
+  assert.ok(q(card, "[data-family-keep]"));
+  flowButton(card, "Discard changes").click();
+  await settle(card);
+  assert.equal(q(card, "dialog"), null);
+  assert.equal(
+    mutations(pool).filter((call) => call.name === "add_funds").length,
+    0,
+  );
+});
+
+test("late save acknowledgement cannot close a newer settings flow or permit duplicate ledger writes", async () => {
+  const { card, pool } = await fixture();
+  await click(card, "add");
+  await input(card, "5");
+  const original = pool.hass().callService;
+  let complete;
+  card.hass = {
+    ...pool.hass(),
+    callService: (domain, name, data) =>
+      name === "add_funds"
+        ? new Promise((resolve) => {
+            complete = () => original(domain, name, data).then(resolve);
+          })
+        : original(domain, name, data),
+  };
+  await submit(card);
+  closeFlow(card);
+  await settle(card);
+  assert.equal(q(card, "dialog"), null);
+  assert.equal(q(card, '[data-action="buy"]').disabled, true);
+  await click(card, "settings");
+  const newer = q(card, "dialog");
+  assert.ok(q(card, ".settings-dialog"));
+  assert.equal(q(card, ".settings-option").disabled, true);
+  complete();
+  await settle(card);
+  assert.equal(q(card, "dialog"), newer);
+  assert.ok(q(card, ".settings-dialog"));
+  assert.equal(q(card, ".settings-option").disabled, false);
+  assert.equal(
+    mutations(pool).filter((call) => call.name === "add_funds").length,
+    1,
+  );
+});
+
+test("a late response from a prior pool configuration cannot clear a new request or close its form", async () => {
+  const { card, pool } = await fixture();
+  let oldDone, newDone;
+  const original = pool.hass().callService;
+  card.hass = {
+    ...pool.hass(),
+    callService: (domain, name, data) =>
+      name === "add_funds"
+        ? new Promise((resolve) => {
+            oldDone = resolve;
+          })
+        : original(domain, name, data),
+  };
+  await click(card, "add");
+  await input(card, "2");
+  await submit(card);
+  card.setConfig({ ...mockConfig, entity: "sensor.other_pool" });
+  card.hass = {
+    ...pool.hass(),
+    states: { "sensor.other_pool": pool.state() },
+    callService: (domain, name, data) =>
+      name === "add_funds"
+        ? new Promise((resolve) => {
+            newDone = resolve;
+          })
+        : original(domain, name, data),
+  };
+  await settle(card);
+  await click(card, "add");
+  await input(card, "3");
+  await submit(card);
+  oldDone({ revision: 2, transaction_id: "old" });
+  await settle(card);
+  assert.equal(q(card, ".form-submit").disabled, true);
+  assert.equal(q(card, "[data-amount]").value, "3");
+  newDone({ revision: 2, transaction_id: "new" });
+  await settle(card);
+  assert.equal(q(card, "dialog"), null);
 });

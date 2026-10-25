@@ -2,7 +2,7 @@
 
 ## Shared card design
 
-Coffee Tracker includes Space Hub Card design tokens and the Space Hub glow helper as extracted by NIBE Dashboard. Source revisions and SHA-256 checksums are recorded in `src/shared/PROVENANCE.md` in the source repository.
+Coffee Tracker bundles `@bitosome/ha-card-ui` (https://github.com/bitosome/ha-card-ui), licensed under MIT. Its tokens, glows and modal components derive from Space Hub Card. Earlier versions used the Space Hub glow extraction from NIBE Dashboard; that historical attribution is retained below. Current package provenance and lockfile integrity are documented in `src/shared/PROVENANCE.md`.
 
 - https://github.com/bitosome/space-hub-card
 - https://github.com/bitosome/nibe-dashboard
@@ -10,6 +10,7 @@ Coffee Tracker includes Space Hub Card design tokens and the Space Hub glow help
 MIT License
 
 Copyright (c) 2026 Artjom Kuznetsov
+Shared UI library copyright (c) 2026 bitosome contributors
 Portions derived from Space Hub Card and its contributors, including Ian Richardson.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -62,3 +63,8 @@ SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
 CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+## Standalone preview icons
+
+The standalone preview uses Material Design Icons cog, chevron-up/down and delete-outline paths from Pictogrammers. These are preview-only fixtures; the installed card uses Home Assistant's native `ha-icon` component. Source: https://pictogrammers.com/library/mdi/ . The Pictogrammers notice and Apache 2.0 license are included in `preview/LICENSE-MDI`.
