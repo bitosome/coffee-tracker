@@ -1,6 +1,6 @@
 {
   "name": "coffee-tracker",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A shared coffee pool integration and card for Home Assistant.",
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "preview": "node preview/server.mjs"
   },
   "dependencies": {
-    "@bitosome/ha-card-ui": "https://github.com/bitosome/ha-card-ui/releases/download/v1.0.0/bitosome-ha-card-ui-1.0.0.tgz",
+    "@bitosome/ha-card-ui": "https://github.com/bitosome/ha-card-ui/releases/download/v1.0.1/bitosome-ha-card-ui-1.0.1.tgz",
     "lit": "^3.3.1"
   },
   "devDependencies": {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2 — 2026-10-26
+
+- Keep error and status notices above the hero activation glow using shared UI 1.0.1; preserve ledger and control behavior.
+
 ## 0.3.1 — 2026-10-26
 
 - Identify Settings, contribution, balance, price and Undo controls as modal launchers rather than inline expanded sections.
