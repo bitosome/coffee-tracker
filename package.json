@@ -1,6 +1,6 @@
 {
   "name": "coffee-tracker",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "A shared coffee pool integration and card for Home Assistant.",
   "type": "module",
   "license": "MIT",

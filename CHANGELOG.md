@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 — 2026-10-26
+
+- Bound activation glows to the outer dashboard card so they cannot wash over neighboring cards. Keep internal tile gaps, focus rings and native top-layer dialogs visible.
+
 ## 0.3.2 — 2026-10-26
 
 - Keep error and status notices above the hero activation glow using shared UI 1.0.1; preserve ledger and control behavior.
