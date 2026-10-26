@@ -37,7 +37,7 @@ For YAML-managed Lovelace resources:
 ```yaml
 lovelace:
   resources:
-    - url: /coffee_tracker/coffee-tracker-card.js?v=0.3.0
+    - url: /coffee_tracker/coffee-tracker-card.js?v=0.3.1
       type: module
 ```
 

@@ -845,7 +845,6 @@ export class CoffeeTrackerCard extends LitElement {
               class="family-icon-button"
               data-action="settings"
               aria-label="Coffee pool settings"
-              aria-expanded=${this.flow.active}
               ?disabled=${!this.online}
               aria-haspopup="dialog"
               @click=${(event: Event) => this.flow.open("settings", event.currentTarget as HTMLElement)}
@@ -871,6 +870,7 @@ export class CoffeeTrackerCard extends LitElement {
                         ><button
                           class="price"
                           data-action="price"
+                          aria-haspopup="dialog"
                           aria-label=${`Change price per cup, currently ${this.currency(pool.price)}`}
                           ?disabled=${blocked}
                           @click=${(event: Event) => this.open("price", event.currentTarget as HTMLElement)}
@@ -911,7 +911,7 @@ export class CoffeeTrackerCard extends LitElement {
                         <button
                           class="tool"
                           data-action="add"
-                          aria-expanded=${this.mode === "add"}
+                          aria-haspopup="dialog"
                           ?disabled=${blocked}
                           @click=${(event: Event) => this.open("add", event.currentTarget as HTMLElement)}
                         >
@@ -919,7 +919,7 @@ export class CoffeeTrackerCard extends LitElement {
                         ><button
                           class="tool"
                           data-action="balance"
-                          aria-expanded=${this.mode === "balance"}
+                          aria-haspopup="dialog"
                           ?disabled=${blocked}
                           @click=${(event: Event) => this.open("balance", event.currentTarget as HTMLElement)}
                         >
@@ -1012,6 +1012,7 @@ export class CoffeeTrackerCard extends LitElement {
                                   ? html`<button
                                       class="text-button"
                                       data-action="undo"
+                                      aria-haspopup="dialog"
                                       ?disabled=${blocked || this.historyLoading}
                                       @click=${(event: Event) => {
                                         this.undoSnapshot = {

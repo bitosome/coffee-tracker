@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1 — 2026-10-26
+
+- Identify Settings, contribution, balance, price and Undo controls as modal launchers rather than inline expanded sections.
+- Keep Activity as a true collapsed disclosure and retain the shared settings cog, guarded form drafts and serialized ledger writes.
+
 ## 0.3.0 — 2026-10-25
 
 - Bundle `@bitosome/ha-card-ui` for canonical Space Hub design, glows and reusable modal/action/feedback components.

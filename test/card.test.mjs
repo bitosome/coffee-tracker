@@ -975,3 +975,19 @@ test("a late response from a prior pool configuration cannot clear a new request
   await settle(card);
   assert.equal(q(card, "dialog"), null);
 });
+
+test("modal launchers expose dialog semantics while activity remains a disclosure", async () => {
+  const { card, pool } = await fixture();
+  for (const action of ["settings", "price", "add", "balance"]) {
+    const button = q(card, `[data-action="${action}"]`);
+    assert.equal(button.getAttribute("aria-haspopup"), "dialog");
+    assert.equal(button.hasAttribute("aria-expanded"), false);
+  }
+  assert.equal(q(card, '[data-action="settings"] ha-icon').icon, "mdi:cog-outline");
+  const activity = q(card, '[data-action="activity"]');
+  assert.equal(activity.getAttribute("aria-expanded"), "false");
+  assert.equal(activity.hasAttribute("aria-haspopup"), false);
+  await click(card, "activity");
+  assert.equal(q(card, '[data-action="undo"]').getAttribute("aria-haspopup"), "dialog");
+  assert.equal(mutations(pool).length, 0);
+});
